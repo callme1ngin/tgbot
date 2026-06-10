@@ -1,0 +1,12 @@
+node_modules/
+.env
+.cache/
+logs/
+npm-debug.log
+
+samples/reference/
+
+*:Zone.Identifier
+test.js
+test.png
+result.png

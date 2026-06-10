@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  tg-html-bot:
+    build: .
+    environment:
+      - NODE_ENV=production
+      - BOT_TOKEN=${BOT_TOKEN}
+      - PORT=3000
+    restart: unless-stopped
+    # Лимиты ресурсов для контроля нагрузки
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+    # Проверка здоровья контейнера
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', () => process.exit(0))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Логирование
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    sysctls:
+      # Оптимизация для большого количества соединений
+      - net.core.somaxconn=1024
+      - net.ipv4.tcp_max_syn_backlog=2048

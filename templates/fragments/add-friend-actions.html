@@ -1,0 +1,46 @@
+<div class="profile_header_actions">
+  <a data-panel="{&quot;autoFocus&quot;:true,&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}" role="button" id="btn_add_friend" class="btn_profile_action btn_medium" href="javascript:AddFriend()">
+    <span>Add Friend</span>
+  </a>
+  <span data-panel="{&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}" role="button" class="btn_profile_action btn_medium" id="profile_action_dropdown_link" onclick="ShowMenu( this, 'profile_action_dropdown', 'right' );">
+    <span>More... <img src="https://community.fastly.steamstatic.com/public/images/profile/profile_action_dropdown.png"></span>
+  </span>
+  <div class="popup_block" id="profile_action_dropdown" style="display: none;">
+    <div class="shadow_ul"></div><div class="shadow_top"></div><div class="shadow_ur"></div><div class="shadow_left"></div><div class="shadow_right"></div><div class="shadow_bl"></div><div class="shadow_bottom"></div><div class="shadow_br"></div>
+    <div data-panel="{&quot;flow-children&quot;:&quot;row&quot;}" class="popup_body popup_menu shadow_content">
+      <a class="popup_menu_item" href="javascript:AddProfileAward( 1, 'https://steamcommunity.com/login/home/?goto=https%3A%2F%2Fsteamcommunity.com%2Fprofiles%2F76561198250811318%2F%3FinsideModal%3D0', '76561198250811318' )">
+        <img src="https://community.fastly.steamstatic.com/public/shared/images/award_icon.svg" class="reward_btn_icon">&nbsp; <span>Give a Community Award</span>
+      </a>
+      <a class="popup_menu_item" href="https://store.steampowered.com/points/profile/76561198250811318?snr=2_100300_profile__points-shop-profile">
+        <img src="https://cdn.fastly.steamstatic.com/steamcommunity/public/assets/profile/equipped_items_icon.svg" id="view_equipped_items_icon" class="reward_btn_icon">&nbsp; <span>View Equipped Point Shop Items</span>
+      </a>
+      <span class="popup_menu_item group_invite_menu_option_disabled tooltip" data-tooltip-text="You must be friends before you can invite a player to join a group." href="javascript:void(0);"><img src="https://community.fastly.steamstatic.com/public/images/profile/icon_invitegroup.png">&nbsp; Invite to Join Your Group</span>
+      <div class="profile_actions_follow">
+        <a style="" class="popup_menu_item follow_button" href="#" onclick="SetFollowing(true, function(bFollowing){ $J('.follow_button').hide(); $J('.unfollow_button').show();  }); HideMenu( 'profile_action_dropdown_link', 'profile_action_dropdown' ); return false;"><img src="https://community.fastly.steamstatic.com/public/images/sharedfiles/add_fav_ico_default.png">&nbsp; Follow</a>
+        <a style="display: none;" class="popup_menu_item unfollow_button" href="#" onclick="SetFollowing(false, function(bFollowing){ $J('.follow_button').show(); $J('.unfollow_button').hide();  }); HideMenu( 'profile_action_dropdown_link', 'profile_action_dropdown' ); return false;"><img src="https://community.fastly.steamstatic.com/public/images/sharedfiles/add_fav_ico_default.png">&nbsp; Stop Following</a>
+      </div>
+      <a data-panel="{&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}" role="button" class="popup_menu_item" href="javascript:ConfirmBlock();"><img src="https://community.fastly.steamstatic.com/public/images/profile/icon_block.png">&nbsp; Block All Communication</a>
+      <a class="popup_menu_item" href="#" onclick="ReportProfile( '76561198250811318' ); HideMenu( 'profile_action_dropdown_link', 'profile_action_dropdown' ); return false;"><img src="https://community.fastly.steamstatic.com/public/images/skin_1/notification_icon_flag.png" style="margin: 0 1px;">&nbsp; Report Player</a>
+      <a class="popup_menu_item" href="#" id="copy_profile_perma_link">
+        <img style="width: 16px; height: 16px" src="chrome-extension://kaibcgikagnkfgjnibflebpldakfhfih/images/paperclip.png">
+        &nbsp; Copy Profile Permalink
+      </a>
+      <a class="popup_menu_item" href="#" id="show_offer_history">
+        <img style="width: 16px; height: 16px" src="https://steamcommunity-a.akamaihd.net/public/images/profile/icon_tradeoffers.png">
+        &nbsp; Show Offer History
+      </a>
+      <a class="popup_menu_item" href="#" id="copy_trade_link">
+        <img style="width: 16px; height: 16px" src="chrome-extension://kaibcgikagnkfgjnibflebpldakfhfih/images/paperclip.png">
+        &nbsp; Copy Trade Link
+      </a>
+      <a class="popup_menu_item" href="https://csgo-rep.com/profile/76561198250811318">
+        <img style="width: 16px; height: 16px" src="chrome-extension://kaibcgikagnkfgjnibflebpldakfhfih/images/growth.png">
+        &nbsp; Open CSGO-REP Profile
+      </a>
+      <a class="popup_menu_item" href="https://csfloat.com/stall/76561198250811318?ref=gerytrading">
+        <img style="width: 16px; height: 16px" src="chrome-extension://kaibcgikagnkfgjnibflebpldakfhfih/images/external_logos/csfloat-square.png">
+        &nbsp; Open CSFloat Stall
+      </a>
+    </div>
+  </div>
+</div>
