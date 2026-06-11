@@ -51,7 +51,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'image-load-check-v1';
+const SCREENSHOT_CACHE_VERSION = 'profile-name-dialog-v1';
 const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
@@ -62,7 +62,6 @@ const TRANSPARENT_PIXEL =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const INVITE_BANNER_MODAL_OFFSET_PX = Number(process.env.INVITE_BANNER_MODAL_OFFSET_PX || 114);
 const ADD_FRIEND_ERROR_STYLE = `<style id="add_friend_error_bot_styles">.add_friend_error_modal{position:fixed;z-index:1000;outline:none;max-width:1071px;left:50%;top:calc(50% + var(--invite-banner-offset,0px));transform:translate(-50%,-50%);}</style>`;
-const ADD_FRIEND_ERROR_DIALOG = `<dialog class="newmodal add_friend_error_modal" data-panel="{&quot;onCancelButton&quot;:&quot;CModal.DismissActiveModal()&quot;}" open=""><div class="modal_top_bar"></div><div class="newmodal_header_border"><div class="newmodal_header"><div class="newmodal_close" data-panel="{&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}"></div><div class="title_text">Add Friend - mimimi</div></div></div><div class="newmodal_content_border"><div class="newmodal_content" style="max-height: 803px;"><div>Couldn't send invitation. Please, try again later.</div><div class="newmodal_buttons" data-panel="{&quot;flow-children&quot;:&quot;row&quot;}"><div class="btn_grey_steamui btn_medium" data-panel="{&quot;autoFocus&quot;:true,&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}"><span>OK</span></div></div></div></div></dialog>`;
 const photoAssets = {
   friendpageExample: {
     path: FRIENDPAGE_EXAMPLE_PATH,
@@ -507,6 +506,22 @@ function parseSteamProfileData(html) {
   }
 }
 
+function getSteamProfileName(root, html) {
+  const steamProfile = parseSteamProfileData(html);
+  const metaTitle = stripSteamCommunityPrefix(getMetaContent(root, ['og:title', 'twitter:title']));
+
+  return (
+    normalizeText(root.querySelector('.actual_persona_name')?.text) ||
+    normalizeText(root.querySelector('.profile_header .persona_name')?.text) ||
+    normalizeText(root.querySelector('.profile_header_centered_persona .persona_name')?.text) ||
+    normalizeText(root.querySelector('.profile_header_summary .persona_name')?.text) ||
+    normalizeText(root.querySelector('.friends_header_name a')?.text) ||
+    normalizeText(steamProfile.personaname) ||
+    metaTitle ||
+    'Steam User'
+  );
+}
+
 function parsePageData(html, selectors, sourceUrl) {
   const root = parse(html);
   const data = {};
@@ -553,12 +568,7 @@ function parsePageData(html, selectors, sourceUrl) {
 function parseFriendTemplateData(html, sourceUrl, sentUrl) {
   const root = parse(html);
   const steamProfile = parseSteamProfileData(html);
-  const profileName =
-    normalizeText(root.querySelector('.actual_persona_name')?.text) ||
-    normalizeText(root.querySelector('.profile_header .persona_name')?.text) ||
-    normalizeText(steamProfile.personaname) ||
-    getMetaContent(root, ['og:title', 'twitter:title']) ||
-    'Без ника';
+  const profileName = getSteamProfileName(root, html);
   let avatarUrl = getImageFromSelectors(root, [
     '.profile_header .playerAvatar.profile_header_size > .playerAvatarAutoSizeInner > picture > img',
     '.profile_header .playerAvatar.profile_header_size > .playerAvatarAutoSizeInner img',
@@ -709,9 +719,16 @@ function injectInviteBanner(root, bannerFragment) {
   root.appendChild(nextBanner);
 }
 
+function buildAddFriendErrorDialog(profileName) {
+  const titleName = escapeHtml(profileName || 'Steam User');
+
+  return `<dialog class="newmodal add_friend_error_modal" data-panel="{&quot;onCancelButton&quot;:&quot;CModal.DismissActiveModal()&quot;}" open=""><div class="modal_top_bar"></div><div class="newmodal_header_border"><div class="newmodal_header"><div class="newmodal_close" data-panel="{&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}"></div><div class="title_text">Add Friend - ${titleName}</div></div></div><div class="newmodal_content_border"><div class="newmodal_content" style="max-height: 803px;"><div>Couldn't send invitation. Please, try again later.</div><div class="newmodal_buttons" data-panel="{&quot;flow-children&quot;:&quot;row&quot;}"><div class="btn_grey_steamui btn_medium" data-panel="{&quot;autoFocus&quot;:true,&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}"><span>OK</span></div></div></div></div></dialog>`;
+}
+
 function injectAddFriendErrorContent(html, finalUrl, actionsFragment, inviteBannerFragment = '') {
   const htmlWithBase = ensureBaseHrefValue(html, finalUrl);
   const root = parse(htmlWithBase);
+  const profileName = getSteamProfileName(root, html);
   const currentActions = root.querySelector('.profile_header_actions');
   const nextActions = parse(actionsFragment).querySelector('.profile_header_actions');
 
@@ -735,7 +752,7 @@ function injectAddFriendErrorContent(html, finalUrl, actionsFragment, inviteBann
 
   return injectBeforeBody(
     result,
-    `<div style="--invite-banner-offset:${inviteBannerOffset}px">${ADD_FRIEND_ERROR_DIALOG}</div>`
+    `<div style="--invite-banner-offset:${inviteBannerOffset}px">${buildAddFriendErrorDialog(profileName)}</div>`
   );
 }
 
