@@ -78,18 +78,33 @@
       height: 16px;
       margin-right: 8px;
       position: relative;
-      border-radius: 4px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 50%, #ffffff 0 18%, transparent 19%),
+        radial-gradient(circle at 50% 50%, transparent 0 34%, #ffffff 35% 42%, transparent 43%),
+        linear-gradient(145deg, #244a7f 0%, #5c7fb0 50%, #1f3761 100%);
       flex-shrink: 0;
     }
 
     .tab-favicon::before {
       content: "";
       position: absolute;
-      left: 4px;
-      top: 4px;
-      width: 8px;
-      height: 8px;
-      border: 1.5px solid #333;
+      left: 3px;
+      top: 3px;
+      width: 10px;
+      height: 10px;
+      border: 1.4px solid #1b2b48;
+      border-radius: 50%;
+    }
+
+    .tab-favicon::after {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 6px;
+      width: 4px;
+      height: 4px;
+      background: #1b2b48;
       border-radius: 50%;
     }
 
@@ -359,14 +374,42 @@
     }
 
     .edge-logo {
-	  width: 25px;
-	  height: 25px;
-	  display: block;
-	  object-fit: contain;
-	  flex-shrink: 0;
-	  user-select: none;
-	  -webkit-user-drag: none;
-	}
+      width: 25px;
+      height: 25px;
+      display: block;
+      flex-shrink: 0;
+      user-select: none;
+      border-radius: 50%;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 62% 62%, #2b2b2b 0 24%, transparent 25%),
+        radial-gradient(circle at 55% 58%, #4fe0dd 0 37%, transparent 38%),
+        conic-gradient(from 205deg, #0b5bd3 0deg 105deg, #08a8d5 105deg 205deg, #6bd35c 205deg 275deg, #1392dc 275deg 360deg);
+    }
+
+    .edge-logo::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 8px;
+      width: 17px;
+      height: 12px;
+      border-radius: 50% 50% 45% 45%;
+      background: linear-gradient(180deg, #1fcbd5 0%, #157bd2 100%);
+      transform: rotate(-13deg);
+    }
+
+    .edge-logo::after {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: 9px;
+      width: 12px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2b2b2b;
+      transform: rotate(-12deg);
     }
   </style>
 </head>
@@ -377,11 +420,7 @@
       <div class="tab-actions-left">⌄</div>
 
       <div class="tab">
-	  <img
-		class="tab-favicon"
-		alt=""
-		src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/1280px-Steam_icon_logo.svg.png"
-	  >
+	  <div class="tab-favicon" aria-hidden="true"></div>
 	  <div class="tab-title">Steam Community :: {{BROWSER_TAB_TITLE}}</div>
 	  <div class="tab-close">×</div>
 	</div>
@@ -466,11 +505,7 @@
       </div>
 
       <div class="edge-brand">
-	  <img
-		class="edge-logo"
-		alt=""
-		src="https://static.wikia.nocookie.net/logopedia/images/4/4d/Microsoft_Edge_%282019%29.svg/revision/latest?cb=20240928105738"
-	  >
+	  <div class="edge-logo" aria-hidden="true"></div>
 	  <div>Microsoft Edge</div>
 	</div>
     </div>
