@@ -95,8 +95,9 @@ async function loadTemplate(templateName) {
   }
 
   const html = await fs.readFile(templatePath, 'utf8');
+  const htmlWithBase = ensureBaseHref(html, templatePath);
   const template = {
-    html: ensureBaseHref(html, templatePath),
+    html: await inlineLocalImageSources(htmlWithBase, templatePath),
     path: templatePath
   };
 
@@ -156,6 +157,68 @@ function ensureBaseHrefValue(html, baseHref) {
   }
 
   return `<base href="${baseHref}">${html}`;
+}
+
+function getAssetMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+
+  if (ext === '.png') {
+    return 'image/png';
+  }
+
+  if (ext === '.jpg' || ext === '.jpeg') {
+    return 'image/jpeg';
+  }
+
+  if (ext === '.gif') {
+    return 'image/gif';
+  }
+
+  if (ext === '.webp') {
+    return 'image/webp';
+  }
+
+  if (ext === '.svg') {
+    return 'image/svg+xml';
+  }
+
+  return 'application/octet-stream';
+}
+
+async function inlineLocalImageSources(html, templatePath) {
+  const templateDir = path.dirname(templatePath);
+  const replacements = new Map();
+  const matches = html.matchAll(/\bsrc=(["'])(\.{1,2}\/[^"']+\.(?:png|jpe?g|gif|webp|svg))\1/gi);
+
+  for (const match of matches) {
+    const [source, quote, imageUrl] = match;
+
+    if (replacements.has(source)) {
+      continue;
+    }
+
+    const imagePath = path.resolve(templateDir, decodeURIComponent(imageUrl));
+
+    if (!imagePath.startsWith(PROJECT_ROOT)) {
+      continue;
+    }
+
+    try {
+      const buffer = await fs.readFile(imagePath);
+      const dataUri = `data:${getAssetMimeType(imagePath)};base64,${buffer.toString('base64')}`;
+      replacements.set(source, `src=${quote}${dataUri}${quote}`);
+    } catch {
+      // Leave the original src in place if the local asset is missing.
+    }
+  }
+
+  let result = html;
+
+  for (const [source, replacement] of replacements) {
+    result = replaceAll(result, source, replacement);
+  }
+
+  return result;
 }
 
 function isPrivateIp(address) {
