@@ -119,6 +119,9 @@ if ( typeof JSON != 'object' || !JSON.stringify || !JSON.parse ) { document.writ
 
     #global_header .header_installsteam_btn {
         margin: 0 !important;
+        /* Steam's anchor is 21 px tall while its painted content is 24: on a flex row that mismatch shows
+           as the button sitting 1.5 px off the bell's plate. The box is stretched to the painted height. */
+        height: 24px !important;
     }
 
     #header_notification_area > *:not([data-featuretarget="green-envelope"]) { display: none !important; }
