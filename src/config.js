@@ -9,7 +9,10 @@ module.exports = {
     // CS2 screens: canvas templates that take their data through window.renderProfile().
     CS2_WRONG_CODE: 'cs2_wrong_code',
     CS2_NOT_FOUND: 'cs2_not_found',
-    CS2_BAN: 'cs2_ban'
+    CS2_BAN: 'cs2_ban',
+    // Dota screens: SVG templates with one <text id="friend-id"> to fill.
+    DOTA_NOT_FOUND: 'dota_not_found',
+    DOTA_NOT_FRIENDS: 'dota_not_friends'
   },
 
   SELECTORS: {

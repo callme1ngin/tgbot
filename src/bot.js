@@ -1280,6 +1280,97 @@ async function processCs2Request(templateName, url, options = {}) {
   return imageBuffer;
 }
 
+function isDotaTemplate(templateName) {
+  return (
+    templateName === config.TEMPLATES.DOTA_NOT_FOUND ||
+    templateName === config.TEMPLATES.DOTA_NOT_FRIENDS
+  );
+}
+
+// The Dota screens are plain SVG: the friend code goes into <text id="friend-id">, everything else is
+// baked into the background. No canvas, no render function, so the screenshot is of the <svg> element
+// at its own viewBox size.
+async function renderDotaScreenshot(templateName, friendCode) {
+  const template = await loadTemplate(templateName);
+  const page = await browserPool.getPage();
+
+  try {
+    await page.setContent(template.html, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000
+    });
+
+    const size = await page.evaluate(() => {
+      const svg = document.querySelector('svg.profile') || document.querySelector('svg');
+
+      if (!svg) {
+        return null;
+      }
+
+      const box = svg.viewBox?.baseVal;
+
+      return box && box.width && box.height
+        ? { width: Math.round(box.width), height: Math.round(box.height) }
+        : null;
+    });
+
+    if (!size) {
+      throw new Error(`no svg viewBox in ${templateName}`);
+    }
+
+    await page.setViewportSize(size);
+
+    const filled = await page.evaluate((code) => {
+      const node = document.getElementById('friend-id');
+
+      if (!node) {
+        return false;
+      }
+
+      node.textContent = code;
+
+      return true;
+    }, friendCode);
+
+    if (!filled) {
+      throw new Error(`friend-id is missing in ${templateName}`);
+    }
+
+    // One frame, so the browser repaints the text before the element screenshot.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true))));
+
+    const svg = await page.$('svg');
+
+    if (!svg) {
+      throw new Error(`svg is missing in ${templateName}`);
+    }
+
+    return await svg.screenshot({ type: 'png' });
+  } finally {
+    await browserPool.releasePage(page);
+  }
+}
+
+async function processDotaRequest(templateName, friendCode) {
+  const code = String(friendCode || '').trim();
+  const cacheKey = screenshotCache.generateKey(`${templateName}:${code}`, 'dota', {
+    renderVersion: SCREENSHOT_CACHE_VERSION
+  });
+  const cached = screenshotCache.get(cacheKey);
+
+  if (cached) {
+    console.log(`Cache hit for ${templateName}: ${code}`);
+    return cached;
+  }
+
+  const imageBuffer = await renderDotaScreenshot(templateName, code);
+
+  screenshotCache.set(cacheKey, imageBuffer);
+  console.log(`Screenshot created for ${templateName}: ${code}`);
+
+  return imageBuffer;
+}
+
 function mainKeyboard() {
   return {
     inline_keyboard: [
@@ -1311,6 +1402,37 @@ function mainKeyboard() {
         {
           text: '🎮CS2 Code',
           callback_data: 'cs2_menu'
+        }
+      ],
+      [
+        {
+          text: '⚔️Dota2 Code',
+          callback_data: 'dota_menu'
+        }
+      ]
+    ]
+  };
+}
+
+function dotaKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: '❓Not Found',
+          callback_data: 'dota_not_found'
+        }
+      ],
+      [
+        {
+          text: '🚫Not Friends',
+          callback_data: 'dota_not_friends'
+        }
+      ],
+      [
+        {
+          text: 'Сменить шаблон',
+          callback_data: 'show_templates'
         }
       ]
     ]
@@ -1420,6 +1542,14 @@ function templateLabel(templateName) {
     return '⛔CS2 Ban';
   }
 
+  if (templateName === config.TEMPLATES.DOTA_NOT_FOUND) {
+    return '❓Dota2 Not Found';
+  }
+
+  if (templateName === config.TEMPLATES.DOTA_NOT_FRIENDS) {
+    return '🚫Dota2 Not Friends';
+  }
+
   return templateName;
 }
 
@@ -1450,6 +1580,14 @@ function templatePrompt(templateName) {
 
   if (templateName === config.TEMPLATES.CS2_BAN) {
     return 'Отправь ссылку на фэйк.';
+  }
+
+  if (templateName === config.TEMPLATES.DOTA_NOT_FOUND) {
+    return 'Отправь френд-код друга.';
+  }
+
+  if (templateName === config.TEMPLATES.DOTA_NOT_FRIENDS) {
+    return 'Отправь френд-код друга.';
   }
 
   return 'Отправь ссылку для обработки.';
@@ -1895,6 +2033,35 @@ bot.action('cs2_fake_code', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_WRON
 bot.action('cs2_not_found', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_NOT_FOUND));
 bot.action('cs2_ban', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_BAN));
 
+async function startDotaFlow(ctx, templateName) {
+  const state = getUserState(ctx);
+  await ctx.answerCbQuery();
+
+  state.template = templateName;
+  state.status = 'waiting_dota_code';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatTemplateHint(templateName, 'Отправь френд-код друга.'),
+    dotaKeyboard()
+  );
+}
+
+bot.action('dota_menu', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.template = null;
+  state.status = 'choosing_dota_template';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(ctx, formatHint('⚔️Dota2 Code', 'Выбери экран.'), dotaKeyboard());
+});
+
+bot.action('dota_not_found', (ctx) => startDotaFlow(ctx, config.TEMPLATES.DOTA_NOT_FOUND));
+bot.action('dota_not_friends', (ctx) => startDotaFlow(ctx, config.TEMPLATES.DOTA_NOT_FRIENDS));
+
 // Renders one ban screen and leaves the durations on screen, so the operator can try another value
 // without walking the whole flow again.
 async function applyCs2Ban(ctx, banText) {
@@ -2156,6 +2323,65 @@ bot.on('text', async (ctx) => {
         ctx,
         formatStateHint(state, 'Не удалось собрать изображение. Отправь код ещё раз.'),
         cs2Keyboard()
+      );
+    }
+
+    return;
+  }
+
+  if (state.status === 'waiting_dota_code') {
+    if (!isDotaTemplate(state.template)) {
+      state.status = 'choosing_dota_template';
+      userState.set(ctx.from.id, state);
+      await editMenu(ctx, formatHint('⚔️Dota2 Code', 'Выбери экран.'), dotaKeyboard());
+      return;
+    }
+
+    const friendCode = url.replace(/\s+/g, '').trim();
+
+    if (!/^[A-Za-z0-9_-]{2,32}$/.test(friendCode)) {
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Отправь френд-код: цифры или буквы, до 32 символов.'),
+        dotaKeyboard()
+      );
+      return;
+    }
+
+    let progressMessage;
+
+    try {
+      state.status = 'processing_dota_code';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(
+        ctx,
+        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nСобираю изображение...`
+      );
+
+      const taskId = `${ctx.from.id}_dota_${Date.now()}`;
+      const imageBuffer = await requestQueue.add(taskId, () =>
+        processDotaRequest(state.template, friendCode)
+      );
+
+      await ctx.replyWithPhoto({ source: imageBuffer });
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_dota_code';
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(ctx, formatStateHint(state, 'Готово.'), dotaKeyboard());
+    } catch (error) {
+      console.error('Dota request error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_dota_code';
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Не удалось собрать изображение. Отправь код ещё раз.'),
+        dotaKeyboard()
       );
     }
 
