@@ -493,6 +493,10 @@ function addErrorModeLabel(mode) {
     return 'Френдлинк';
   }
 
+  if (mode === 'phone') {
+    return 'Телефон';
+  }
+
   return '';
 }
 
@@ -1537,6 +1541,81 @@ async function processQrFriendRequest(url) {
   return imageBuffer;
 }
 
+// Phone version of the add-friend error screen. Its data is not the uppercase placeholder set either:
+// six lowercase keys, and the friend card is the profile from the link while the code is typed by the
+// operator — the same code that "failed" to send an invitation.
+const ADD_ERROR_PHONE_VIEWPORT = { width: 851, height: 1849 };
+
+async function renderAddErrorPhone(pageData, code, url) {
+  const template = await loadTemplate(config.TEMPLATES.ADD_ERROR_PHONE);
+  const nick = escapeHtml(pageData.profileName || 'Steam User');
+  const avatar = escapeHtml(pageData.avatarUrl || '');
+
+  const html = template.html
+    .split('{{user_nick}}')
+    .join(nick)
+    .split('{{friend_nick}}')
+    .join(nick)
+    .split('{{user_pic}}')
+    .join(avatar)
+    .split('{{friend_pic}}')
+    .join(avatar)
+    .split('{{input_code}}')
+    .join(escapeHtml(code))
+    .split('{{invite_link}}')
+    .join(escapeHtml(url));
+
+  const page = await browserPool.getPage();
+
+  try {
+    await page.setViewportSize(ADD_ERROR_PHONE_VIEWPORT);
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+    await page.evaluate(() =>
+      Promise.all(
+        Array.from(document.images).map((img) =>
+          img.complete
+            ? true
+            : new Promise((resolve) => {
+                img.onload = resolve;
+                img.onerror = resolve;
+              })
+        )
+      )
+    );
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true))));
+
+    const screen = await page.$('#steam-screen');
+
+    if (!screen) {
+      throw new Error('add-error phone template has no #steam-screen');
+    }
+
+    return await screen.screenshot({ type: 'png' });
+  } finally {
+    await browserPool.releasePage(page);
+  }
+}
+
+async function processAddErrorPhone(pageData, code, url) {
+  const cacheKey = screenshotCache.generateKey(url, `${config.TEMPLATES.ADD_ERROR_PHONE}:${code}`, {
+    renderVersion: SCREENSHOT_CACHE_VERSION
+  });
+  const cached = screenshotCache.get(cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
+  const imageBuffer = await renderAddErrorPhone(pageData, code, url);
+
+  screenshotCache.set(cacheKey, imageBuffer);
+  console.log(`Screenshot created for ${config.TEMPLATES.ADD_ERROR_PHONE}: ${url}`);
+
+  return imageBuffer;
+}
+
 function mainKeyboard() {
   return {
     inline_keyboard: [
@@ -1888,6 +1967,12 @@ function addErrorModeKeyboard() {
       ],
       [
         {
+          text: '📱 Телефон',
+          callback_data: 'add_error_phone'
+        }
+      ],
+      [
+        {
           text: 'Сменить шаблон',
           callback_data: 'show_templates'
         }
@@ -2198,6 +2283,7 @@ async function showTemplateMenu(ctx, options = {}) {
   state.lastSteamChinaData = null;
   state.cs2Profile = null;
   state.addErrorMode = null;
+  state.addErrorData = null;
   userState.set(ctx.from.id, state);
 
   if (options.deleteCommand) {
@@ -2214,6 +2300,7 @@ async function selectTemplate(ctx, templateName) {
   state.template = templateName;
   state.status = templateName === config.TEMPLATES.ADD_ERROR ? 'choosing_add_error_mode' : 'waiting_link';
   state.addErrorMode = null;
+  state.addErrorData = null;
   state.lastFriendPageData = null;
   state.lastSteamChinaData = null;
   userState.set(ctx.from.id, state);
@@ -2258,6 +2345,7 @@ async function selectAddErrorMode(ctx, mode) {
 
   state.template = config.TEMPLATES.ADD_ERROR;
   state.addErrorMode = mode;
+  state.addErrorData = null;
   state.status = 'waiting_link';
   userState.set(ctx.from.id, state);
 
@@ -2323,6 +2411,7 @@ async function selectFriendVariant(ctx, templateName) {
   state.template = templateName;
   state.status = 'waiting_link';
   state.addErrorMode = null;
+  state.addErrorData = null;
   state.lastFriendPageData = null;
   userState.set(ctx.from.id, state);
 
@@ -2344,6 +2433,7 @@ bot.action('qr_friend', async (ctx) => {
   state.template = config.TEMPLATES.QR_FRIEND;
   state.status = 'waiting_qr_link';
   state.addErrorMode = null;
+  state.addErrorData = null;
   userState.set(ctx.from.id, state);
 
   await editMenu(
@@ -2354,6 +2444,7 @@ bot.action('qr_friend', async (ctx) => {
 });
 bot.action('add_error_profile', (ctx) => selectAddErrorMode(ctx, 'profile'));
 bot.action('add_error_friendlink', (ctx) => selectAddErrorMode(ctx, 'friendlink'));
+bot.action('add_error_phone', (ctx) => selectAddErrorMode(ctx, 'phone'));
 
 async function startCs2Flow(ctx, templateName) {
   const state = getUserState(ctx);
@@ -2977,6 +3068,70 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  if (state.status === 'waiting_add_error_code') {
+    const code = url.replace(/\s+/g, '').trim();
+
+    if (!/^[A-Za-z0-9_-]{2,32}$/.test(code)) {
+      await replaceMenu(
+        ctx,
+        formatStateHint(state, 'Отправь френд-код: цифры или буквы, до 32 символов.'),
+        selectedTemplateKeyboard()
+      );
+      return;
+    }
+
+    if (!state.addErrorData) {
+      state.status = 'waiting_link';
+      userState.set(ctx.from.id, state);
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Сначала отправь ссылку на фейк.'),
+        selectedTemplateKeyboard()
+      );
+      return;
+    }
+
+    let progressMessage;
+
+    try {
+      state.status = 'processing_add_error_code';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(
+        ctx,
+        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nСтавлю код ${code}...`
+      );
+
+      const taskId = `${ctx.from.id}_add_error_code_${Date.now()}`;
+      const imageBuffer = await requestQueue.add(taskId, () =>
+        processAddErrorPhone(state.addErrorData, code, state.addErrorData.sentUrl || '')
+      );
+
+      await ctx.replyWithPhoto({ source: imageBuffer });
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_link';
+      state.addErrorData = null;
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(ctx, formatStateHint(state, 'Готово.'), selectedTemplateKeyboard());
+    } catch (error) {
+      console.error('Add-error phone code error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_add_error_code';
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(
+        ctx,
+        formatStateHint(state, 'Не удалось собрать изображение. Отправь код ещё раз.'),
+        selectedTemplateKeyboard()
+      );
+    }
+
+    return;
+  }
+
   if (state.status === 'waiting_qr_link') {
     try {
       await assertPublicHttpUrl(url);
@@ -3303,7 +3458,7 @@ bot.on('text', async (ctx) => {
 
   if (
     state.template === config.TEMPLATES.ADD_ERROR &&
-    !['profile', 'friendlink'].includes(state.addErrorMode)
+    !['profile', 'friendlink', 'phone'].includes(state.addErrorMode)
   ) {
     state.status = 'choosing_add_error_mode';
     userState.set(ctx.from.id, state);
@@ -3331,6 +3486,50 @@ bot.on('text', async (ctx) => {
     );
   }
 
+  if (state.template === config.TEMPLATES.ADD_ERROR && state.addErrorMode === 'phone') {
+    let progressMessage;
+
+    try {
+      state.status = 'processing_add_error_link';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(
+        ctx,
+        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nЧитаю профиль...`
+      );
+
+      const taskId = `${ctx.from.id}_add_error_link_${Date.now()}`;
+      const pageData = await requestQueue.add(taskId, () => loadFriendPageData(url));
+
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_add_error_code';
+      state.addErrorData = pageData;
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(
+        ctx,
+        formatStateHint(state, 'Отправь френд-код, который не приняли.'),
+        selectedTemplateKeyboard()
+      );
+    } catch (error) {
+      console.error('Add-error phone link error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_link';
+      state.addErrorData = null;
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Не удалось прочитать профиль. Отправь ссылку ещё раз.'),
+        selectedTemplateKeyboard()
+      );
+    }
+
+    return;
+  }
+
   if (state.template === config.TEMPLATES.STEAM_CHINA) {
     let progressMessage;
 
@@ -3355,7 +3554,6 @@ bot.on('text', async (ctx) => {
     } catch (error) {
       console.error('Steam China link request error:', error);
       await deleteProgressMessage(ctx, progressMessage);
-
       state.status = 'waiting_link';
       state.lastSteamChinaData = null;
       userState.set(ctx.from.id, state);

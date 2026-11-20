@@ -9,6 +9,8 @@ module.exports = {
     FRIEND_MOBILE: 'friendpage-mobile.bundle',
     // Friend page with a QR of the link; the QR is generated on the server.
     QR_FRIEND: 'steam_community_qr',
+    // Phone version of the add-friend error screen.
+    ADD_ERROR_PHONE: 'steam_friend_invite_phone',
     STEAM_CHINA: 'steamchina.bundle',
     // CS2 screens: canvas templates that take their data through window.renderProfile().
     CS2_WRONG_CODE: 'cs2_wrong_code',
