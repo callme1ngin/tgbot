@@ -1462,6 +1462,81 @@ async function processDotaRequest(templateName, friendCode) {
   return imageBuffer;
 }
 
+// The QR screen: the friend page plus a QR of the link, both drawn from the same template. Its four
+// placeholders are lowercase — {{user_nick}}, {{user_pic}}, {{qr_code}}, {{invite_link}} — so they are
+// replaced here instead of going through the uppercase placeholder set the other templates use.
+const QR_FRIEND_VIEWPORT = { width: 871, height: 1806 };
+
+async function processQrFriendRequest(url) {
+  const cacheKey = screenshotCache.generateKey(url, config.TEMPLATES.QR_FRIEND, {
+    renderVersion: SCREENSHOT_CACHE_VERSION
+  });
+  const cached = screenshotCache.get(cacheKey);
+
+  if (cached) {
+    console.log(`Cache hit for ${config.TEMPLATES.QR_FRIEND}: ${url}`);
+    return cached;
+  }
+
+  const pageData = await loadFriendPageData(url);
+  const QRCode = require('qrcode');
+
+  // 530 px for a 265 px box: the QR stays sharp when the picture is opened at full size.
+  const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 530, errorCorrectionLevel: 'M' });
+
+  const template = await loadTemplate(config.TEMPLATES.QR_FRIEND);
+
+  const html = template.html
+    .split('{{user_nick}}')
+    .join(escapeHtml(pageData.profileName || 'Steam User'))
+    .split('{{user_pic}}')
+    .join(escapeHtml(pageData.avatarUrl || ''))
+    .split('{{qr_code}}')
+    .join(qrDataUrl)
+    .split('{{invite_link}}')
+    .join(escapeHtml(url));
+
+  const page = await browserPool.getPage();
+
+  let imageBuffer;
+
+  try {
+    await page.setViewportSize(QR_FRIEND_VIEWPORT);
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+    // The avatar is a remote image: wait for it, or shoot a hole where the face should be.
+    await page.evaluate(() =>
+      Promise.all(
+        Array.from(document.images).map((img) =>
+          img.complete
+            ? true
+            : new Promise((resolve) => {
+                img.onload = resolve;
+                img.onerror = resolve;
+              })
+        )
+      )
+    );
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true))));
+
+    const capture = await page.$('#capture');
+
+    if (!capture) {
+      throw new Error('QR template has no #capture element');
+    }
+
+    imageBuffer = await capture.screenshot({ type: 'png' });
+  } finally {
+    await browserPool.releasePage(page);
+  }
+
+  screenshotCache.set(cacheKey, imageBuffer);
+  console.log(`Screenshot created for ${config.TEMPLATES.QR_FRIEND}: ${url}`);
+
+  return imageBuffer;
+}
+
 function mainKeyboard() {
   return {
     inline_keyboard: [
@@ -1469,6 +1544,12 @@ function mainKeyboard() {
         {
           text: '📨Страница друга',
           callback_data: 'template_friend'
+        }
+      ],
+      [
+        {
+          text: '📷QR Страница друга',
+          callback_data: 'qr_friend'
         }
       ],
       [
@@ -2255,6 +2336,22 @@ async function selectFriendVariant(ctx, templateName) {
 
 bot.action('friend_variant_pc', (ctx) => selectFriendVariant(ctx, config.TEMPLATES.FRIEND));
 bot.action('friend_variant_mobile', (ctx) => selectFriendVariant(ctx, config.TEMPLATES.FRIEND_MOBILE));
+
+bot.action('qr_friend', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.template = config.TEMPLATES.QR_FRIEND;
+  state.status = 'waiting_qr_link';
+  state.addErrorMode = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHint('📷QR Страница друга', 'Отправь ссылку на фейк.'),
+    selectedTemplateKeyboard()
+  );
+});
 bot.action('add_error_profile', (ctx) => selectAddErrorMode(ctx, 'profile'));
 bot.action('add_error_friendlink', (ctx) => selectAddErrorMode(ctx, 'friendlink'));
 
@@ -2874,6 +2971,53 @@ bot.on('text', async (ctx) => {
         ctx,
         formatStateHint(state, 'Не удалось собрать изображение. Отправь код ещё раз.'),
         cs2Keyboard()
+      );
+    }
+
+    return;
+  }
+
+  if (state.status === 'waiting_qr_link') {
+    try {
+      await assertPublicHttpUrl(url);
+    } catch {
+      await editMenu(
+        ctx,
+        formatHint('📷QR Страница друга', 'Отправь действующий http/https адрес.'),
+        selectedTemplateKeyboard()
+      );
+      return;
+    }
+
+    let progressMessage;
+
+    try {
+      state.status = 'processing_qr';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(ctx, 'Шаблон: 📷QR Страница друга\nСобираю изображение...');
+
+      const taskId = `${ctx.from.id}_qr_${Date.now()}`;
+      const imageBuffer = await requestQueue.add(taskId, () => processQrFriendRequest(url));
+
+      await ctx.replyWithPhoto({ source: imageBuffer });
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_qr_link';
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(ctx, formatHint('📷QR Страница друга', 'Готово.'), selectedTemplateKeyboard());
+    } catch (error) {
+      console.error('QR friend request error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_qr_link';
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatHint('📷QR Страница друга', 'Не удалось собрать изображение. Отправь ссылку ещё раз.'),
+        selectedTemplateKeyboard()
       );
     }
 
