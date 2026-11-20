@@ -2365,12 +2365,24 @@ bot.action('tracker_confirm', async (ctx) => {
     return;
   }
 
-  const status = await tracker.freshStatus(steamId).catch(() => null);
+  let status = null;
+  let failure = '';
+
+  try {
+    status = await tracker.freshStatus(steamId);
+  } catch (error) {
+    failure = String(error?.message || error);
+  }
 
   if (!status) {
     await editMenu(
       ctx,
-      formatHint('👁 Трекер', 'Steam не ответил. Попробуй добавить ещё раз.'),
+      formatHint(
+        '👁 Трекер',
+        failure.includes('is not set')
+          ? 'На сервере не задан STEAM_WEB_API_KEY.'
+          : 'Steam не ответил. Попробуй добавить ещё раз.'
+      ),
       trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
     );
     return;
@@ -2741,12 +2753,27 @@ bot.on('text', async (ctx) => {
       return;
     }
 
-    const status = await tracker.freshStatus(steamId).catch(() => null);
+    let status = null;
+    let failure = '';
+
+    try {
+      status = await tracker.freshStatus(steamId);
+    } catch (error) {
+      failure = String(error?.message || error);
+    }
 
     if (!status) {
+      const reason = failure.includes('is not set')
+        ? 'На сервере не задан STEAM_WEB_API_KEY — статус недоступен.'
+        : /HTTP 40[13]/.test(failure)
+          ? 'Steam отверг ключ API. Проверь STEAM_WEB_API_KEY.'
+          : failure.startsWith('Steam API')
+            ? `Steam ответил ошибкой: ${failure}.`
+            : 'Профиль не найден: SteamID неверный или профиль скрыт.';
+
       await editMenu(
         ctx,
-        formatHint('👁 Трекер', 'Steam не отдал профиль. Проверь ссылку и попробуй снова.'),
+        formatHint('👁 Трекер', reason),
         trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
       );
       return;

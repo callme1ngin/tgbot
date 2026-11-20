@@ -5,6 +5,14 @@ services:
       - NODE_ENV=production
       - BOT_TOKEN=${BOT_TOKEN}
       - PORT=3000
+      - STEAM_WEB_API_KEY=${STEAM_WEB_API_KEY}
+      - TRACKER_POLL_MS=${TRACKER_POLL_MS:-60000}
+      - TRACKER_MAX_PER_USER=${TRACKER_MAX_PER_USER:-10}
+      - TRACKER_MAX_TOTAL=${TRACKER_MAX_TOTAL:-500}
+    # Всё из .env попадает в контейнер: без этого ключ и настройки трекера остаются на хосте,
+    # а бот внутри видит пустое окружение и отвечает «Steam не отдал профиль».
+    env_file:
+      - .env
     restart: unless-stopped
     # Трекер пишет состояние в /app/data. Без тома оно живёт в слое контейнера и стирается каждой
     # пересборкой — то есть при каждом обновлении бота терялись бы все привязанные профили.

@@ -129,6 +129,10 @@ async function steamJson(url) {
 }
 
 async function fetchSummaries(steamIds) {
+  if (!apiKey()) {
+    throw new Error('STEAM_WEB_API_KEY is not set');
+  }
+
   if (steamIds.length === 0) {
     return [];
   }
