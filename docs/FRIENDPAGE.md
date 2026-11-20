@@ -1,8 +1,16 @@
 # Friend page: шапка
 
 Экран «Страница друга» собирается из `template-sources/friendpage/` в
-`templates/friendpage.bundle.html` скриптом `npm run bundle:friendpage` (он же теперь идёт в
-`Dockerfile`, чтобы бандл не отставал от исходника).
+`templates/friendpage.bundle.html` скриптом `npm run bundle:friendpage`.
+
+Важно: `scripts/` и `template-sources/` исключены в `.dockerignore`, поэтому сборщик бандла в образ не
+попадает и в `Dockerfile` шага сборки нет — образ берёт **закоммиченный** `templates/friendpage.bundle.html`.
+После правок в `template-sources` бандл надо пересобрать и закоммитить вместе с ними:
+
+```bash
+npm run bundle:friendpage
+git add template-sources templates/friendpage.bundle.html
+```
 
 ## Что добавлено
 

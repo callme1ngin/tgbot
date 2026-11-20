@@ -8,9 +8,10 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-# The friend page is assembled from template-sources: keep the bundle in step with them at build time,
-# so a changed source can never ship next to a stale bundle.
-RUN npm run bundle:friendpage
+# The friend-page bundle is a committed file, produced by `npm run bundle:friendpage` on the machine that
+# edits template-sources. It is not rebuilt here on purpose: .dockerignore keeps scripts/ and
+# template-sources/ out of the image, so there is nothing to build from — and a build step that cannot
+# run is worse than a documented one that does.
 
 ENV NODE_OPTIONS="--max-old-space-size=512"
 ENV NODE_ENV=production
