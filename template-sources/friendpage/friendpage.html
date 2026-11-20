@@ -102,9 +102,23 @@ if ( typeof JSON != 'object' || !JSON.stringify || !JSON.parse ) { document.writ
         justify-content: center;
         width: 46px;
         height: 24px;
-        margin: 0 3px 0 17px;
+        margin: 0 3px 0 7px;
         background: rgba(103, 112, 123, 0.2);
         vertical-align: middle;
+    }
+
+    /* Steam lays the menu out as inline-blocks, so the whitespace between the install anchor and the
+       bell div renders as a gap of its own and the anchor keeps a 3 px margin. A flex row removes the
+       whitespace; the margin and the plate's own margin make the painted distance 7 px. The install
+       button is left exactly as Steam styles it — its icon and padding live in that rule set. */
+    #global_header #global_action_menu {
+        display: flex !important;
+        align-items: center !important;
+        height: auto !important;
+    }
+
+    #global_header .header_installsteam_btn {
+        margin: 0 !important;
     }
 
     #header_notification_area > *:not([data-featuretarget="green-envelope"]) { display: none !important; }
