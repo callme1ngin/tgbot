@@ -25,10 +25,13 @@
   #friend-code-input { left:83px; top:826px; width:705px; height:66px;
       font-size:28px; line-height:66px; color:#b7bec6; font-style:normal; }
   #friend-code-input.empty {font-style:italic; color:#8b9299;}
-  /* Одна строка: длинный хост (si.team-rvc.com) иначе ломался на две и обрезался. Ширина — до кнопки
-     COPY, размер шрифта подгоняет renderSteamFriend. */
-  #invite-link { left:87px; top:1295px; width:470px; height:75px;
-      font-size:28px; line-height:75px; white-space:nowrap; overflow:hidden; }
+  /* Две строки, как в оригинале: перенос разрешён, но кегль подобран так, чтобы первым удобным
+     переносом был дефис в слаге, а не в домене. 26px: ~36 символов в строку при ширине 470 — «…/p/oaze-»
+     ещё влезает, «tpvw/…» уходит на вторую. */
+  #invite-link { left:87px; top:1286px; width:470px; height:78px;
+      display:flex; align-items:center;
+      font-size:26px; line-height:37px; white-space:normal; overflow:hidden;
+      overflow-wrap:break-word; }
   /* Профильное имя вшито в фон. Пара готова заменить его, если бот передал profile_name. */
   #name-cover { position:absolute; left:228px; top:202px; width:312px; height:64px; background:#28405f; display:none; }
   #profile-name { position:absolute; left:234px; top:202px; height:64px; width:600px; display:none;
@@ -104,12 +107,7 @@ function renderSteamFriend(data = {}) {
   if (own.length > 12) ownEl.classList.add('smaller');
   else if (own.length > 11) ownEl.classList.add('small');
   ownEl.textContent = own;
-  const linkEl = $('invite-link');
-  linkEl.textContent = String(current.invite_link ?? '');
-  linkEl.style.fontSize = '28px';
-  for (let size = 28; size > 14 && linkEl.scrollWidth > linkEl.clientWidth; size -= 1) {
-    linkEl.style.fontSize = size + 'px';
-  }
+  $('invite-link').textContent = String(current.invite_link ?? '');
   for (const id of ['avatar-top','avatar-profile']) {
     const element = $(id);
     if (current.user_pic) {
