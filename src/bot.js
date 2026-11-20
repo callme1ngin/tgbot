@@ -1013,7 +1013,18 @@ async function screenshotModifiedHtml(html, viewport = DEFAULT_SCREENSHOT_VIEWPO
 }
 
 function isFriendLikeTemplate(templateName) {
-  return templateName === config.TEMPLATES.FRIEND || templateName === config.TEMPLATES.STEAM_CHINA;
+  return (
+    templateName === config.TEMPLATES.FRIEND ||
+    templateName === config.TEMPLATES.FRIEND_MOBILE ||
+    templateName === config.TEMPLATES.STEAM_CHINA
+  );
+}
+
+function isFriendPageTemplate(templateName) {
+  return (
+    templateName === config.TEMPLATES.FRIEND ||
+    templateName === config.TEMPLATES.FRIEND_MOBILE
+  );
 }
 
 async function loadFriendPageData(url) {
@@ -1021,8 +1032,69 @@ async function loadFriendPageData(url) {
   return parseFriendTemplateData(originalHtml, finalUrl, url);
 }
 
+// The phone variant is a fixed 875×1798 frame with its own render function, so it is neither templated
+// by placeholders nor screenshotted as a page: setContent, call renderSteamFriend, shoot the frame.
+const PHONE_FRIEND_VIEWPORT = { width: 875, height: 1798 };
+
+async function screenshotPhoneFriend(html, data) {
+  const page = await browserPool.getPage();
+
+  try {
+    await page.setViewportSize(PHONE_FRIEND_VIEWPORT);
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+    await page.waitForFunction(() => typeof window.renderSteamFriend === 'function', undefined, {
+      timeout: 15000
+    });
+
+    const payload = {
+      friend_code: String(data.friendCodeInput || ''),
+      invite_link: String(data.sentUrl || '')
+    };
+
+    if (data.profileName) {
+      payload.profile_name = String(data.profileName);
+    }
+
+    if (data.avatarUrl) {
+      payload.user_pic = String(data.avatarUrl);
+    }
+
+    if (data.friendCode) {
+      payload.own_code = String(data.friendCode);
+    }
+
+    const rendered = await page.evaluate((values) => {
+      try {
+        window.renderSteamFriend(values);
+        return true;
+      } catch (error) {
+        return String(error?.message || error);
+      }
+    }, payload);
+
+    if (rendered !== true) {
+      throw new Error(String(rendered));
+    }
+
+    // One frame so the avatar and the scaled frame are painted before the element screenshot.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true))));
+
+    const frame = await page.$('#frame');
+
+    if (!frame) {
+      throw new Error('phone frame #frame is missing');
+    }
+
+    return await frame.screenshot({ type: 'png' });
+  } finally {
+    await browserPool.releasePage(page);
+  }
+}
+
 async function processRequest(url, templateName, options = {}) {
   const isFriendPage = isFriendLikeTemplate(templateName);
+  const isPhoneFriend = templateName === config.TEMPLATES.FRIEND_MOBILE;
   const isBrowserError = templateName === config.TEMPLATES.ERROR;
   const isAddFriendError = templateName === config.TEMPLATES.ADD_ERROR;
   const cacheKey = screenshotCache.generateKey(url, templateName, {
@@ -1068,6 +1140,15 @@ async function processRequest(url, templateName, options = {}) {
     finalHtml = injectDataIntoTemplate(template, pageData);
   }
 
+  if (isPhoneFriend) {
+    const imageBuffer = await screenshotPhoneFriend(finalHtml, pageData);
+
+    screenshotCache.set(cacheKey, { imageBuffer, pageData });
+    console.log(`Screenshot created for ${templateName}: ${url}`);
+
+    return { imageBuffer, pageData };
+  }
+
   const screenshot = await screenshotModifiedHtml(
     finalHtml,
     isFriendPage ? FRIEND_SCREENSHOT_VIEWPORT : DEFAULT_SCREENSHOT_VIEWPORT
@@ -1110,6 +1191,13 @@ async function processFriendCodeRequest(pageData, friendCodeInput, templateName 
   if (templateName === config.TEMPLATES.STEAM_CHINA) {
     const cardFragment = await loadFragment('steam-china-profile-card.html');
     finalHtml = injectSteamChinaProfileCard(finalHtml, cardFragment);
+  }
+
+  if (templateName === config.TEMPLATES.FRIEND_MOBILE) {
+    const imageBuffer = await screenshotPhoneFriend(finalHtml, data);
+
+    screenshotCache.set(cacheKey, imageBuffer);
+    return imageBuffer;
   }
 
   const screenshot = await screenshotModifiedHtml(finalHtml, FRIEND_SCREENSHOT_VIEWPORT);
@@ -1619,6 +1707,10 @@ function templateLabel(templateName) {
     return '📨Страница друга';
   }
 
+  if (templateName === config.TEMPLATES.FRIEND_MOBILE) {
+    return '📱Страница друга';
+  }
+
   if (templateName === config.TEMPLATES.ERROR) {
     return '⚠️Ошибка браузера';
   }
@@ -1656,6 +1748,10 @@ function templateLabel(templateName) {
 
 function templatePrompt(templateName) {
   if (templateName === config.TEMPLATES.FRIEND) {
+    return 'Отправь ссылку на фейк.';
+  }
+
+  if (templateName === config.TEMPLATES.FRIEND_MOBILE) {
     return 'Отправь ссылку на фейк.';
   }
 
@@ -1732,10 +1828,36 @@ function selectedTemplateKeyboard() {
   };
 }
 
+// The friend page opens on a desktop screen or inside a phone frame; the rest of the flow is identical.
+function friendVariantKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: '🖥 ПК (веб-версия)',
+          callback_data: 'friend_variant_pc'
+        }
+      ],
+      [
+        {
+          text: '📱 Телефон',
+          callback_data: 'friend_variant_mobile'
+        }
+      ],
+      [
+        {
+          text: 'Сменить шаблон',
+          callback_data: 'show_templates'
+        }
+      ]
+    ]
+  };
+}
+
 function resultTemplateKeyboard(templateName, canAddFriendCode = false) {
   const rows = [];
 
-  if (templateName === config.TEMPLATES.FRIEND && canAddFriendCode) {
+  if (isFriendPageTemplate(templateName) && canAddFriendCode) {
     rows.push([
       {
         text: 'Добавить код друга',
@@ -2019,7 +2141,15 @@ async function selectTemplate(ctx, templateName) {
   const menuText = formatTemplateHint(templateName, templatePrompt(templateName));
 
   if (templateName === config.TEMPLATES.FRIEND) {
-    await replaceMenuWithPhoto(ctx, FRIENDPAGE_EXAMPLE_PATH, menuText, selectedTemplateKeyboard());
+    state.template = null;
+    state.status = 'choosing_friend_variant';
+    userState.set(ctx.from.id, state);
+
+    await editMenu(
+      ctx,
+      formatHint('📨Страница друга', 'Выбери, как открывать страницу: ПК или телефон.'),
+      friendVariantKeyboard()
+    );
     return;
   }
 
@@ -2104,6 +2234,27 @@ bot.action('template_error', (ctx) => selectTemplate(ctx, config.TEMPLATES.ERROR
 bot.action('template_friend', (ctx) => selectTemplate(ctx, config.TEMPLATES.FRIEND));
 bot.action('template_add_error', (ctx) => selectTemplate(ctx, config.TEMPLATES.ADD_ERROR));
 bot.action('template_steam_china', (ctx) => selectTemplate(ctx, config.TEMPLATES.STEAM_CHINA));
+
+async function selectFriendVariant(ctx, templateName) {
+  const state = getUserState(ctx);
+  await ctx.answerCbQuery();
+
+  state.template = templateName;
+  state.status = 'waiting_link';
+  state.addErrorMode = null;
+  state.lastFriendPageData = null;
+  userState.set(ctx.from.id, state);
+
+  await replaceMenuWithPhoto(
+    ctx,
+    FRIENDPAGE_EXAMPLE_PATH,
+    formatTemplateHint(templateName, templatePrompt(templateName)),
+    selectedTemplateKeyboard()
+  );
+}
+
+bot.action('friend_variant_pc', (ctx) => selectFriendVariant(ctx, config.TEMPLATES.FRIEND));
+bot.action('friend_variant_mobile', (ctx) => selectFriendVariant(ctx, config.TEMPLATES.FRIEND_MOBILE));
 bot.action('add_error_profile', (ctx) => selectAddErrorMode(ctx, 'profile'));
 bot.action('add_error_friendlink', (ctx) => selectAddErrorMode(ctx, 'friendlink'));
 
@@ -2970,7 +3121,7 @@ bot.on('text', async (ctx) => {
 
       const taskId = `${ctx.from.id}_friend_code_${Date.now()}`;
       const imageBuffer = await requestQueue.add(taskId, () =>
-        processFriendCodeRequest(state.lastFriendPageData, friendCodeInput)
+        processFriendCodeRequest(state.lastFriendPageData, friendCodeInput, state.template)
       );
 
       await ctx.replyWithPhoto({ source: imageBuffer });
@@ -3094,7 +3245,7 @@ bot.on('text', async (ctx) => {
     await deleteProgressMessage(ctx, progressMessage);
 
     state.status = 'waiting_link';
-    state.lastFriendPageData = state.template === config.TEMPLATES.FRIEND ? pageData : null;
+    state.lastFriendPageData = isFriendPageTemplate(state.template) ? pageData : null;
     userState.set(ctx.from.id, state);
     await replaceMenu(
       ctx,

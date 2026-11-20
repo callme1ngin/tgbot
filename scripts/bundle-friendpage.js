@@ -1,10 +1,16 @@
+// scripts/bundle-friendpage.js — two friend pages, one build step.
+//
+//   friendpage        → templates/friendpage.bundle.html          (desktop / web)
+//   friendpage-mobile → templates/friendpage-mobile.bundle.html    (phone mockup)
+//
+// Assets referenced from disk are inlined as data URIs, so a bundle is one self-contained file the bot
+// can setContent() without a base path. The desktop page has its scripts stripped: it is a static
+// picture. The phone page keeps its script — renderSteamFriend() is the whole point there.
 const fs = require('fs');
 const path = require('path');
 
 const rootDir = path.join(__dirname, '..');
-const sourceDir = path.join(rootDir, 'template-sources', 'friendpage');
-const inputPath = path.join(sourceDir, 'friendpage.html');
-const outputPath = path.join(rootDir, 'templates', 'friendpage.bundle.html');
+const templatesDir = path.join(rootDir, 'templates');
 
 const mimeTypes = {
   '.css': 'text/css',
@@ -20,7 +26,22 @@ const mimeTypes = {
   '.woff2': 'font/woff2'
 };
 
-const assetCache = new Map();
+const jobs = [
+  {
+    name: 'friendpage',
+    sourceDir: path.join(rootDir, 'template-sources', 'friendpage'),
+    input: 'friendpage.html',
+    output: 'friendpage.bundle.html',
+    stripScripts: true
+  },
+  {
+    name: 'friendpage-mobile',
+    sourceDir: path.join(rootDir, 'template-sources', 'friendpage-mobile'),
+    input: 'friendpage-mobile.html',
+    output: 'friendpage-mobile.bundle.html',
+    stripScripts: false
+  }
+];
 
 function getMimeType(filePath) {
   return mimeTypes[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
@@ -56,83 +77,73 @@ function resolveAssetPath(url, baseDir) {
   return fs.existsSync(candidate) ? candidate : null;
 }
 
-function assetToDataUri(filePath) {
-  if (assetCache.has(filePath)) {
-    return assetCache.get(filePath);
-  }
+function buildJob(job) {
+  const assetCache = new Map();
 
-  const mimeType = getMimeType(filePath);
-  const dataUri = `data:${mimeType};base64,${fs.readFileSync(filePath).toString('base64')}`;
-  assetCache.set(filePath, dataUri);
-  return dataUri;
-}
-
-function inlineCssUrls(css, cssPath) {
-  const cssDir = path.dirname(cssPath);
-
-  return css.replace(/url\(([^)]+)\)/g, (match, rawUrl) => {
-    const quote = rawUrl.trim().startsWith("'") ? "'" : rawUrl.trim().startsWith('"') ? '"' : '';
-    const url = rawUrl.trim().replace(/^['"]|['"]$/g, '');
-    const assetPath = resolveAssetPath(url, cssDir);
-
-    if (!assetPath) {
-      return match;
+  const assetToDataUri = (filePath) => {
+    if (assetCache.has(filePath)) {
+      return assetCache.get(filePath);
     }
 
-    return `url(${quote}${assetToDataUri(assetPath)}${quote})`;
-  });
-}
+    const dataUri = `data:${getMimeType(filePath)};base64,${fs.readFileSync(filePath).toString('base64')}`;
+    assetCache.set(filePath, dataUri);
 
-function inlineStylesheets(html) {
-  return html.replace(/<link\b[^>]*href=(["'])([^"']+\.css)\1[^>]*>/gi, (match, quote, href) => {
-    const cssPath = resolveAssetPath(href, sourceDir);
+    return dataUri;
+  };
 
-    if (!cssPath) {
-      return match;
-    }
+  const inlineCssUrls = (css, cssPath) => {
+    const cssDir = path.dirname(cssPath);
 
-    const css = inlineCssUrls(fs.readFileSync(cssPath, 'utf8'), cssPath);
-    return `<style data-bundled-from="${href}">\n${css}\n</style>`;
-  });
-}
+    return css.replace(/url\(([^)]+)\)/g, (match, rawUrl) => {
+      const quote = rawUrl.trim().startsWith("'") ? "'" : rawUrl.trim().startsWith('"') ? '"' : '';
+      const url = rawUrl.trim().replace(/^['"]|['"]$/g, '');
+      const assetPath = resolveAssetPath(url, cssDir);
 
-function inlineHtmlAssetAttributes(html) {
-  return html.replace(/\b(src|href)=(["'])(\.\/friendpage_files\/[^"']+)\2/gi, (match, attr, quote, url) => {
-    const assetPath = resolveAssetPath(url, sourceDir);
+      return assetPath ? `url(${quote}${assetToDataUri(assetPath)}${quote})` : match;
+    });
+  };
 
-    if (!assetPath) {
-      return match;
-    }
+  const inlineStylesheets = (html) =>
+    html.replace(/<link\b[^>]*href=(["'])([^"']+\.css)\1[^>]*>/gi, (match, quote, href) => {
+      const cssPath = resolveAssetPath(href, job.sourceDir);
 
-    return `${attr}=${quote}${assetToDataUri(assetPath)}${quote}`;
-  });
-}
+      if (!cssPath) {
+        return match;
+      }
 
-function removeScripts(html) {
-  return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
-}
+      const css = inlineCssUrls(fs.readFileSync(cssPath, 'utf8'), cssPath);
 
-function removeHiddenServiceFrames(html) {
-  return html.replace(/<iframe\b[^>]*id=(["'])is-service-frame\1[^>]*><\/iframe>/gi, '');
-}
+      return `<style data-bundled-from="${href}">\n${css}\n</style>`;
+    });
 
-function bundleFriendPage() {
+  const inlineHtmlAssets = (html) =>
+    html.replace(/\b(src|href)=(["'])(\.\/[^"']+)\2/gi, (match, attr, quote, url) => {
+      const assetPath = resolveAssetPath(url, job.sourceDir);
+
+      return assetPath ? `${attr}=${quote}${assetToDataUri(assetPath)}${quote}` : match;
+    });
+
+  const inputPath = path.join(job.sourceDir, job.input);
+  const outputPath = path.join(templatesDir, job.output);
+
   let html = fs.readFileSync(inputPath, 'utf8');
 
   html = inlineStylesheets(html);
-  html = inlineHtmlAssetAttributes(html);
-  html = removeHiddenServiceFrames(html);
-  html = removeScripts(html);
+  html = inlineHtmlAssets(html);
+  html = html.replace(/<iframe\b[^>]*id=(["'])is-service-frame\1[^>]*><\/iframe>/gi, '');
+
+  if (job.stripScripts) {
+    html = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+  }
 
   fs.writeFileSync(outputPath, html);
 
-  const originalBytes = fs.statSync(inputPath).size;
-  const bundledBytes = fs.statSync(outputPath).size;
-
   console.log(`Bundled ${path.relative(rootDir, inputPath)} -> ${path.relative(rootDir, outputPath)}`);
-  console.log(`Original: ${originalBytes} bytes`);
-  console.log(`Bundled: ${bundledBytes} bytes`);
+  console.log(`Original: ${fs.statSync(inputPath).size} bytes`);
+  console.log(`Bundled: ${fs.statSync(outputPath).size} bytes`);
   console.log(`Inlined assets: ${assetCache.size}`);
 }
 
-bundleFriendPage();
+for (const job of jobs) {
+  buildJob(job);
+}

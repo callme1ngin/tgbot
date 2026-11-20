@@ -5,6 +5,8 @@ module.exports = {
     ADD_ERROR: 'addFriendError',
     ERROR: 'BrowserError',
     FRIEND: 'friendpage.bundle',
+    // Phone mockup of the same screen: a fixed 875×1798 frame with window.renderSteamFriend().
+    FRIEND_MOBILE: 'friendpage-mobile.bundle',
     STEAM_CHINA: 'steamchina.bundle',
     // CS2 screens: canvas templates that take their data through window.renderProfile().
     CS2_WRONG_CODE: 'cs2_wrong_code',
