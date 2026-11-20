@@ -1,37 +1,46 @@
 {
   "//": "Вид кнопок. Ключ — callback_data или префикс с *; icon — custom_emoji_id (нужен Premium у владельца бота), style — primary | success | danger. Правки подхватываются без перезапуска.",
   "buttons": {
+    "section_profile": { "icon": "", "style": "primary" },
+    "section_codes": { "icon": "", "style": "primary" },
+    "tracker_menu": { "icon": "", "style": "primary" },
+    "help_screen": { "icon": "", "style": "" },
+
+    "root_menu": { "icon": "", "style": "" },
+    "again": { "icon": "", "style": "primary" },
+
     "template_friend": { "icon": "", "style": "primary" },
     "qr_friend": { "icon": "", "style": "primary" },
     "template_add_error": { "icon": "", "style": "primary" },
     "template_error": { "icon": "", "style": "primary" },
     "template_steam_china": { "icon": "", "style": "primary" },
 
-    "cs2_menu": { "icon": "5206607081334906820", "style": "primary" },
-    "dota_menu": { "icon": "", "style": "primary" },
-    "cs2_fake_code": { "icon": "", "style": "primary" },
-    "cs2_not_found": { "icon": "", "style": "primary" },
-    "cs2_ban": { "icon": "", "style": "danger" },
-    "dota_fake_code": { "icon": "", "style": "primary" },
-    "dota_not_found": { "icon": "", "style": "primary" },
-    "dota_not_friends": { "icon": "", "style": "primary" },
-
-    "tracker_menu": { "icon": "", "style": "primary" },
-    "tracker_add": { "icon": "", "style": "success" },
-    "tracker_list": { "icon": "", "style": "" },
-    "tracker_notify": { "icon": "", "style": "" },
-    "tracker_remove_*": { "icon": "", "style": "danger" },
-    "tracker_confirm": { "icon": "", "style": "success" },
-
     "friend_variant_pc": { "icon": "", "style": "" },
     "friend_variant_mobile": { "icon": "", "style": "" },
+
     "add_error_profile": { "icon": "", "style": "" },
     "add_error_friendlink": { "icon": "", "style": "" },
     "add_error_phone": { "icon": "", "style": "" },
 
-    "show_templates": { "icon": "", "style": "" },
+    "cs2_menu": { "icon": "5206607081334906820", "style": "primary" },
+    "dota_menu": { "icon": "", "style": "primary" },
+    "cs2_fake_code": { "icon": "", "style": "" },
+    "cs2_not_found": { "icon": "", "style": "" },
+    "cs2_ban": { "icon": "", "style": "danger" },
+    "cs2b_custom": { "icon": "", "style": "" },
+    "dota_fake_code": { "icon": "", "style": "" },
+    "dota_not_found": { "icon": "", "style": "" },
+    "dota_not_friends": { "icon": "", "style": "" },
+
     "add_friend_code": { "icon": "", "style": "primary" },
-    "cs2b_custom": { "icon": "", "style": "" }
+
+    "tracker_add": { "icon": "", "style": "success" },
+    "tracker_list": { "icon": "", "style": "" },
+    "tracker_notify": { "icon": "", "style": "" },
+    "tracker_confirm": { "icon": "", "style": "success" },
+    "tracker_open_*": { "icon": "", "style": "" },
+    "tracker_refresh_*": { "icon": "", "style": "" },
+    "tracker_remove_*": { "icon": "", "style": "danger" }
   },
   "fallback": {}
 }

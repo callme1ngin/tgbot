@@ -481,8 +481,9 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// Шапка экрана: первая строка — раздел и вариант, вторая — состояние. Больше двух строк не бывает.
 function formatHint(title, text) {
-  return `<blockquote><b>${escapeHtml(title)}</b>\n🔗 ${escapeHtml(text)}</blockquote>`;
+  return `<blockquote><b>${escapeHtml(title)}</b>\n${escapeHtml(text)}</blockquote>`;
 }
 
 function addErrorModeLabel(mode) {
@@ -501,19 +502,16 @@ function addErrorModeLabel(mode) {
   return '';
 }
 
-function templateProgressName(templateName, mode) {
+// Подпись экрана в шапке: раздел · вариант. Вариант есть только у экрана с типом ссылки.
+function screenLabel(templateName, mode) {
   const label = templateLabel(templateName);
   const modeLabel = templateName === config.TEMPLATES.ADD_ERROR ? addErrorModeLabel(mode) : '';
 
-  return modeLabel ? `${label} - ${modeLabel}` : label;
+  return modeLabel ? `${label} · ${modeLabel}` : label;
 }
 
 function formatTemplateHint(templateName, text, mode) {
-  const label = templateLabel(templateName);
-  const modeLabel = templateName === config.TEMPLATES.ADD_ERROR ? addErrorModeLabel(mode) : '';
-  const title = modeLabel ? `${label}\n🔴${modeLabel}` : label;
-
-  return formatHint(title, text);
+  return formatHint(screenLabel(templateName, mode), text);
 }
 
 function formatStateHint(state, text) {
@@ -1617,59 +1615,45 @@ async function processAddErrorPhone(pageData, code, url) {
   return imageBuffer;
 }
 
+// Кнопка: текст и данные, вид (иконка, цвет) приходит из data/ui.json по callback_data.
+const b = (text, callback) => ({ text, callback_data: callback });
+
+const homeRow = () => [b('🏠 Меню', 'root_menu')];
+
 function mainKeyboard() {
   return {
     inline_keyboard: [
-      [
-        {
-          text: '📨Страница друга',
-          callback_data: 'template_friend'
-        }
-      ],
-      [
-        {
-          text: '📷QR Страница друга',
-          callback_data: 'qr_friend'
-        }
-      ],
-      [
-        {
-          text: '⚠️Ошибка браузера',
-          callback_data: 'template_error'
-        }
-      ],
-      [
-        {
-          text: '🫂Ошибка добавления',
-          callback_data: 'template_add_error'
-        }
-      ],
-      [
-        {
-          text: '🇨🇳Ошибка steam china',
-          callback_data: 'template_steam_china'
-        }
-      ],
-      [
-        {
-          text: '🎮CS2 Code',
-          callback_data: 'cs2_menu'
-        }
-      ],
-      [
-        {
-          text: '⚔️Dota2 Code',
-          callback_data: 'dota_menu'
-        }
-      ],
-      [
-        {
-          text: '👁 Трекер',
-          callback_data: 'tracker_menu'
-        }
-      ]
+      [b('🎭 Профиль', 'section_profile'), b('🎮 Коды', 'section_codes')],
+      [b('📡 Трекер', 'tracker_menu'), b('❔ Помощь', 'help_screen')]
     ]
   };
+}
+
+function profileKeyboard() {
+  return {
+    inline_keyboard: [
+      [b('📨 Страница друга', 'template_friend')],
+      [b('📷 QR-страница', 'qr_friend')],
+      [b('🫂 Ошибка добавления', 'template_add_error')],
+      [b('⚠️ Ошибка браузера', 'template_error')],
+      [b('🇨🇳 Steam China', 'template_steam_china')],
+      homeRow()
+    ]
+  };
+}
+
+function codesKeyboard() {
+  return {
+    inline_keyboard: [
+      [b('🎯 CS2 Code', 'cs2_menu')],
+      [b('⚔️ Dota2 Code', 'dota_menu')],
+      homeRow()
+    ]
+  };
+}
+
+function helpKeyboard() {
+  return { inline_keyboard: [homeRow()] };
 }
 
 function trackerStatusLabel(profile) {
@@ -1687,48 +1671,20 @@ function trackerStatusLabel(profile) {
 function trackerKeyboard(notifyOn) {
   return {
     inline_keyboard: [
-      [
-        {
-          text: '➕ Добавить профиль',
-          callback_data: 'tracker_add'
-        }
-      ],
-      [
-        {
-          text: '📋 Мои профили',
-          callback_data: 'tracker_list'
-        }
-      ],
-      [
-        {
-          text: `🔔 Уведомления: ${notifyOn ? 'вкл' : 'выкл'}`,
-          callback_data: 'tracker_notify'
-        }
-      ],
-      [
-        {
-          text: 'Сменить шаблон',
-          callback_data: 'show_templates'
-        }
-      ]
+      [b('➕ Добавить профиль', 'tracker_add')],
+      [b('📋 Мои профили', 'tracker_list')],
+      [b(`🔔 Уведомления: ${notifyOn ? 'вкл' : 'выкл'}`, 'tracker_notify')],
+      homeRow()
     ]
   };
 }
 
 function trackerListKeyboard(profiles) {
   const rows = profiles.map((profile) => [
-    {
-      text: `${trackerStatusLabel(profile).slice(0, 24)} · ${String(profile.name).slice(0, 20)}`,
-      callback_data: `tracker_open_${profile.steamId}`
-    }
+    b(`${trackerStatusLabel(profile).slice(0, 24)} · ${String(profile.name).slice(0, 20)}`, `tracker_open_${profile.steamId}`)
   ]);
 
-  rows.push([
-    {
-      text: '← Назад',
-      callback_data: 'tracker_menu'
-    }
-  ]);
+  rows.push([b('← Назад', 'tracker_menu')]);
 
   return { inline_keyboard: rows };
 }
@@ -1736,24 +1692,9 @@ function trackerListKeyboard(profiles) {
 function trackerProfileKeyboard(steamId) {
   return {
     inline_keyboard: [
-      [
-        {
-          text: '🔄 Обновить',
-          callback_data: `tracker_refresh_${steamId}`
-        }
-      ],
-      [
-        {
-          text: '🗑 Отписаться',
-          callback_data: `tracker_remove_${steamId}`
-        }
-      ],
-      [
-        {
-          text: '← Назад',
-          callback_data: 'tracker_list'
-        }
-      ]
+      [b('🔄 Обновить', `tracker_refresh_${steamId}`)],
+      [b('🗑 Отписаться', `tracker_remove_${steamId}`)],
+      [b('← Назад', 'tracker_list')]
     ]
   };
 }
@@ -1761,30 +1702,11 @@ function trackerProfileKeyboard(steamId) {
 function dotaKeyboard() {
   return {
     inline_keyboard: [
-      [
-        {
-          text: '🎯Fake Code',
-          callback_data: 'dota_fake_code'
-        }
-      ],
-      [
-        {
-          text: '❓Not Found',
-          callback_data: 'dota_not_found'
-        }
-      ],
-      [
-        {
-          text: '🚫Not Friends',
-          callback_data: 'dota_not_friends'
-        }
-      ],
-      [
-        {
-          text: 'Сменить шаблон',
-          callback_data: 'show_templates'
-        }
-      ]
+      [b('🎯 Fake Code', 'dota_fake_code')],
+      [b('❓ Not Found', 'dota_not_found')],
+      [b('🚫 Not Friends', 'dota_not_friends')],
+      [b('← Назад', 'section_codes')],
+      homeRow()
     ]
   };
 }
@@ -1792,30 +1714,11 @@ function dotaKeyboard() {
 function cs2Keyboard() {
   return {
     inline_keyboard: [
-      [
-        {
-          text: '🎯CS2 Fake Code',
-          callback_data: 'cs2_fake_code'
-        }
-      ],
-      [
-        {
-          text: '❓CS2 Code Not found',
-          callback_data: 'cs2_not_found'
-        }
-      ],
-      [
-        {
-          text: '⛔CS2 Ban',
-          callback_data: 'cs2_ban'
-        }
-      ],
-      [
-        {
-          text: 'Сменить шаблон',
-          callback_data: 'show_templates'
-        }
-      ]
+      [b('🎯 Fake Code', 'cs2_fake_code')],
+      [b('❓ Code Not Found', 'cs2_not_found')],
+      [b('⛔ Ban', 'cs2_ban')],
+      [b('← Назад', 'section_codes')],
+      homeRow()
     ]
   };
 }
@@ -1846,62 +1749,57 @@ function cs2BanKeyboard() {
     );
   }
 
-  rows.push([
-    {
-      text: '✏️Custom',
-      callback_data: 'cs2b_custom'
-    }
-  ]);
-
-  rows.push([
-    {
-      text: 'Сменить шаблон',
-      callback_data: 'show_templates'
-    }
-  ]);
+  rows.push([b('✏️ Свой текст', 'cs2b_custom')]);
+  rows.push([b('← Назад', 'section_codes')]);
+  rows.push(homeRow());
 
   return { inline_keyboard: rows };
 }
 
+// Подпись экрана — то, что видно первой строкой шапки. Вариант стоит в той же строке, через точку.
 function templateLabel(templateName) {
   if (templateName === config.TEMPLATES.FRIEND) {
-    return '📨Страница друга';
+    return '📨 Страница друга · ПК';
   }
 
   if (templateName === config.TEMPLATES.FRIEND_MOBILE) {
-    return '📱Страница друга';
+    return '📨 Страница друга · Телефон';
+  }
+
+  if (templateName === config.TEMPLATES.QR_FRIEND) {
+    return '📷 QR-страница';
   }
 
   if (templateName === config.TEMPLATES.ERROR) {
-    return '⚠️Ошибка браузера';
+    return '⚠️ Ошибка браузера';
   }
 
   if (templateName === config.TEMPLATES.ADD_ERROR) {
-    return '🫂Ошибка добавления';
+    return '🫂 Ошибка добавления';
   }
 
   if (templateName === config.TEMPLATES.STEAM_CHINA) {
-    return '🇨🇳Ошибка steam china';
+    return '🇨🇳 Steam China';
   }
 
   if (templateName === config.TEMPLATES.CS2_WRONG_CODE) {
-    return '🎯CS2 Fake Code';
+    return '🎯 CS2 Fake Code';
   }
 
   if (templateName === config.TEMPLATES.CS2_NOT_FOUND) {
-    return '❓CS2 Code Not found';
+    return '❓ CS2 Code Not Found';
   }
 
   if (templateName === config.TEMPLATES.CS2_BAN) {
-    return '⛔CS2 Ban';
+    return '⛔ CS2 Ban';
   }
 
   if (templateName === config.TEMPLATES.DOTA_NOT_FOUND) {
-    return '❓Dota2 Not Found';
+    return '❓ Dota2 Not Found';
   }
 
   if (templateName === config.TEMPLATES.DOTA_NOT_FRIENDS) {
-    return '🚫Dota2 Not Friends';
+    return '🚫 Dota2 Not Friends';
   }
 
   return templateName;
@@ -1954,43 +1852,41 @@ function templatePrompt(templateName) {
 function addErrorModeKeyboard() {
   return {
     inline_keyboard: [
-      [
-        {
-          text: 'Профиль',
-          callback_data: 'add_error_profile'
-        }
-      ],
-      [
-        {
-          text: 'Френдлинк',
-          callback_data: 'add_error_friendlink'
-        }
-      ],
-      [
-        {
-          text: '📱 Телефон',
-          callback_data: 'add_error_phone'
-        }
-      ],
-      [
-        {
-          text: 'Сменить шаблон',
-          callback_data: 'show_templates'
-        }
-      ]
+      [b('🖥 Профиль', 'add_error_profile')],
+      [b('🔗 Френдлинк', 'add_error_friendlink')],
+      [b('📱 Телефон', 'add_error_phone')],
+      backRow('section_profile'),
+      homeRow()
     ]
   };
 }
 
-function selectedTemplateKeyboard() {
+// Раздел, из которого открыт экран: «← Назад» ведёт туда, а не в самый корень. Корень — это «🏠 Меню»,
+// отдельная кнопка, чтобы не приходилось угадывать, куда вернёт стрелка.
+function sectionOf(templateName) {
+  if (isCs2Template(templateName) || isDotaTemplate(templateName)) {
+    return 'section_codes';
+  }
+
+  return 'section_profile';
+}
+
+function backRow(section) {
+  return [b('← Назад', section)];
+}
+
+// Пока бот ждёт ввод, единственная разумная кнопка — отмена. Куда отменять, знает раздел экрана.
+function waitingKeyboard(templateName) {
+  return { inline_keyboard: [[b('✖️ Отмена', sectionOf(templateName))]] };
+}
+
+// Ошибка всегда даёт два выхода: тот же экран заново или в раздел.
+function errorKeyboard(templateName) {
   return {
     inline_keyboard: [
-      [
-        {
-          text: 'Сменить шаблон',
-          callback_data: 'show_templates'
-        }
-      ]
+      [b('🔁 Ещё раз', 'again')],
+      backRow(sectionOf(templateName)),
+      homeRow()
     ]
   };
 }
@@ -1999,46 +1895,24 @@ function selectedTemplateKeyboard() {
 function friendVariantKeyboard() {
   return {
     inline_keyboard: [
-      [
-        {
-          text: '🖥 ПК (веб-версия)',
-          callback_data: 'friend_variant_pc'
-        }
-      ],
-      [
-        {
-          text: '📱 Телефон',
-          callback_data: 'friend_variant_mobile'
-        }
-      ],
-      [
-        {
-          text: 'Сменить шаблон',
-          callback_data: 'show_templates'
-        }
-      ]
+      [b('🖥 ПК', 'friend_variant_pc'), b('📱 Телефон', 'friend_variant_mobile')],
+      backRow('section_profile'),
+      homeRow()
     ]
   };
 }
 
+// Клавиатура результата: повторить тот же экран, вернуться в раздел, уйти в корень.
 function resultTemplateKeyboard(templateName, canAddFriendCode = false) {
   const rows = [];
 
   if (isFriendPageTemplate(templateName) && canAddFriendCode) {
-    rows.push([
-      {
-        text: 'Добавить код друга',
-        callback_data: 'add_friend_code'
-      }
-    ]);
+    rows.push([b('➕ Добавить код друга', 'add_friend_code')]);
   }
 
-  rows.push([
-    {
-      text: 'Сменить шаблон',
-      callback_data: 'show_templates'
-    }
-  ]);
+  rows.push([b('🔁 Ещё раз', 'again')]);
+  rows.push(backRow(sectionOf(templateName)));
+  rows.push(homeRow());
 
   return { inline_keyboard: rows };
 }
@@ -2068,6 +1942,7 @@ async function deleteSavedMenu(ctx) {
   await ctx.telegram.deleteMessage(state.chatId, state.menuMessageId).catch(() => {});
   state.menuMessageId = null;
   state.menuMessageType = null;
+  state.menuKind = null;
   userState.set(ctx.from.id, state);
 }
 
@@ -2084,7 +1959,15 @@ async function deleteIncomingMessage(ctx) {
 }
 
 async function sendProgressMessage(ctx, text) {
-  return ctx.reply(text);
+  const state = getUserState(ctx);
+  state.startedAt = Date.now();
+  userState.set(ctx.from.id, state);
+
+  // Счётчик времени в подписи результата и «отправляет фото» в шапке чата: оператор видит, что работа
+  // идёт, и сколько она заняла.
+  await ctx.sendChatAction('upload_photo').catch(() => {});
+
+  return ctx.reply(`⏳ ${text}`);
 }
 
 async function deleteProgressMessage(ctx, message) {
@@ -2204,7 +2087,9 @@ async function editMenu(ctx, text, replyMarkup) {
     reply_markup: ui.decorateInline(replyMarkup || { inline_keyboard: [] })
   };
 
-  if (messageId && chatId) {
+  // Готовый скриншот не переписываем: его подпись — это результат, а не меню. Раздел, открытый с
+  // результата, приходит отдельным сообщением, картинка остаётся выше.
+  if (messageId && chatId && state.menuKind !== 'result') {
     try {
       if (state.menuMessageType === 'photo') {
         await ctx.telegram.editMessageCaption(chatId, messageId, undefined, text, options);
@@ -2243,11 +2128,21 @@ async function editMenu(ctx, text, replyMarkup) {
   }
 
   const message = await ctx.reply(text, options);
+  state.menuKind = 'text';
   await saveMenuMessage(ctx, message);
 }
 
 async function replaceMenu(ctx, text, replyMarkup) {
-  await deleteSavedMenu(ctx);
+  const state = getUserState(ctx);
+  // Готовый скриншот не трогаем: он уходит только когда его заменит следующий результат.
+  const keepOld = state.menuKind === 'result';
+
+  if (!keepOld) {
+    await deleteSavedMenu(ctx);
+  }
+
+  state.menuKind = 'text';
+  userState.set(ctx.from.id, state);
   const message = await ctx.reply(text, {
     parse_mode: 'HTML',
     reply_markup: ui.decorateInline(replyMarkup)
@@ -2259,7 +2154,12 @@ async function replaceMenuWithPhoto(ctx, photoPath, caption, replyMarkup) {
   const state = getUserState(ctx);
   const oldChatId = state.chatId;
   const oldMessageId = state.menuMessageId;
+  const keepOld = state.menuKind === 'result';
   const asset = Object.values(photoAssets).find(item => item.path === photoPath);
+
+  state.menuKind = 'logo';
+  userState.set(ctx.from.id, state);
+
   const message = await replyWithCachedPhoto(ctx, photoPath, {
     caption,
     parse_mode: 'HTML',
@@ -2270,8 +2170,39 @@ async function replaceMenuWithPhoto(ctx, photoPath, caption, replyMarkup) {
     await cachePhotoFileId(asset, message);
   }
 
+  if (!keepOld) {
+    await deleteMenuMessage(ctx, oldChatId, oldMessageId);
+  }
+
+  await saveMenuMessage(ctx, message);
+}
+
+// Результат — одно сообщение: картинка с подписью и кнопками. Экран ожидания под ней больше не нужен,
+// поэтому он удаляется: в чате остаётся только то, что оператор заберёт.
+async function sendResult(ctx, imageBuffer, { label, status = '✅ Готово', keyboard }) {
+  const state = getUserState(ctx);
+  const oldChatId = state.chatId;
+  const oldMessageId = state.menuMessageId;
+  const seconds = state.startedAt ? (Date.now() - state.startedAt) / 1000 : 0;
+  const line = seconds > 0 ? `${status} · ${seconds.toFixed(1)} с` : status;
+
+  state.startedAt = null;
+  state.menuKind = 'result';
+  userState.set(ctx.from.id, state);
+
+  const message = await ctx.replyWithPhoto(
+    { source: imageBuffer },
+    {
+      caption: formatHint(label, line),
+      parse_mode: 'HTML',
+      reply_markup: ui.decorateInline(keyboard)
+    }
+  );
+
   await deleteMenuMessage(ctx, oldChatId, oldMessageId);
   await saveMenuMessage(ctx, message);
+
+  return message;
 }
 
 async function showTemplateMenu(ctx, options = {}) {
@@ -2280,6 +2211,7 @@ async function showTemplateMenu(ctx, options = {}) {
   const state = getUserState(ctx);
   state.template = null;
   state.status = 'choosing_template';
+  state.staticScreen = null;
   state.lastFriendPageData = null;
   state.lastSteamChinaData = null;
   state.cs2Profile = null;
@@ -2291,7 +2223,7 @@ async function showTemplateMenu(ctx, options = {}) {
     await deleteIncomingMessage(ctx);
   }
 
-  await replaceMenuWithPhoto(ctx, SILENTLOGO_PATH, formatHint('Меню', 'Выбери шаблон.'), mainKeyboard());
+  await replaceMenuWithPhoto(ctx, SILENTLOGO_PATH, formatHint('🏠 Меню', 'Выбери раздел.'), mainKeyboard());
 }
 
 async function selectTemplate(ctx, templateName) {
@@ -2299,6 +2231,7 @@ async function selectTemplate(ctx, templateName) {
 
   const state = getUserState(ctx);
   state.template = templateName;
+  state.staticScreen = null;
   state.status = templateName === config.TEMPLATES.ADD_ERROR ? 'choosing_add_error_mode' : 'waiting_link';
   state.addErrorMode = null;
   state.addErrorData = null;
@@ -2316,19 +2249,19 @@ async function selectTemplate(ctx, templateName) {
 
     await editMenu(
       ctx,
-      formatHint('📨Страница друга', 'Выбери, как открывать страницу: ПК или телефон.'),
+      formatHint('📨 Страница друга', 'Как открывать страницу?'),
       friendVariantKeyboard()
     );
     return;
   }
 
   if (templateName === config.TEMPLATES.STEAM_CHINA) {
-    await replaceMenuWithPhoto(ctx, FRIENDPAGE_EXAMPLE_PATH, menuText, selectedTemplateKeyboard());
+    await replaceMenuWithPhoto(ctx, FRIENDPAGE_EXAMPLE_PATH, menuText, waitingKeyboard(templateName));
     return;
   }
 
   if (templateName === config.TEMPLATES.ERROR) {
-    await replaceMenuWithPhoto(ctx, BROWSERERROR_EXAMPLE_PATH, menuText, selectedTemplateKeyboard());
+    await replaceMenuWithPhoto(ctx, BROWSERERROR_EXAMPLE_PATH, menuText, waitingKeyboard(templateName));
     return;
   }
 
@@ -2337,7 +2270,7 @@ async function selectTemplate(ctx, templateName) {
     return;
   }
 
-  await editMenu(ctx, menuText, selectedTemplateKeyboard());
+  await editMenu(ctx, menuText, waitingKeyboard(templateName));
 }
 
 async function selectAddErrorMode(ctx, mode) {
@@ -2415,9 +2348,109 @@ bot.command('emoji', async (ctx) => {
   );
 });
 
-bot.action('show_templates', async (ctx) => {
+bot.action('root_menu', async (ctx) => {
   await ctx.answerCbQuery();
   await showTemplateMenu(ctx);
+});
+
+// Раздел — это просто меню с другим набором кнопок; состояние обнуляется, чтобы «Ещё раз» из старого
+// экрана не утащило в прежний шаблон.
+async function showSection(ctx, title, text, keyboard) {
+  const state = getUserState(ctx);
+  state.template = null;
+  state.staticScreen = null;
+  state.status = 'choosing_template';
+  state.addErrorMode = null;
+  state.addErrorData = null;
+  state.cs2Profile = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(ctx, formatHint(title, text), keyboard);
+}
+
+bot.action('section_profile', async (ctx) => {
+  await ctx.answerCbQuery();
+  await showSection(ctx, '🎭 Профиль', 'Что собрать?', profileKeyboard());
+});
+
+bot.action('section_codes', async (ctx) => {
+  await ctx.answerCbQuery();
+  await showSection(ctx, '🎮 Коды', 'CS2 и Dota2.', codesKeyboard());
+});
+
+bot.action('help_screen', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  await showSection(
+    ctx,
+    '❔ Помощь',
+    [
+      'Профиль — страницы Steam: обычная, с QR, ошибки.',
+      'Коды — экраны CS2 и Dota2.',
+      'Трекер — слежу за онлайном привязанных профилей.',
+      'Ссылка — адрес нашей страницы, начинается с https://',
+      '/emoji — пересланный премиум-эмодзи в его ID.'
+    ].join('\n'),
+    helpKeyboard()
+  );
+});
+
+// «Ещё раз» возвращает тот же экран в состояние «ждём ссылку», не заставляя идти по меню заново.
+bot.action('again', async (ctx) => {
+  const state = getUserState(ctx);
+  const template = state.template;
+
+  // The delegated starter answers the callback itself; answering here as well would be a second answer
+  // to the same query, which Telegram rejects.
+  if (!template) {
+    if (state.staticScreen === 'dota_fake_code') {
+      await ctx.answerCbQuery();
+      await sendDotaFakeCode(ctx);
+      return;
+    }
+
+    await showTemplateMenu(ctx);
+    return;
+  }
+
+  if (template === config.TEMPLATES.FRIEND || template === config.TEMPLATES.FRIEND_MOBILE) {
+    await selectFriendVariant(ctx, template);
+    return;
+  }
+
+  if (template === config.TEMPLATES.CS2_WRONG_CODE || template === config.TEMPLATES.CS2_NOT_FOUND || template === config.TEMPLATES.CS2_BAN) {
+    await startCs2Flow(ctx, template);
+    return;
+  }
+
+  if (template === config.TEMPLATES.DOTA_NOT_FOUND || template === config.TEMPLATES.DOTA_NOT_FRIENDS) {
+    await startDotaFlow(ctx, template);
+    return;
+  }
+
+  if (template === config.TEMPLATES.QR_FRIEND) {
+    state.status = 'waiting_qr_link';
+    userState.set(ctx.from.id, state);
+    await editMenu(
+      ctx,
+      formatHint(templateLabel(template), 'Отправь ссылку на фейк.'),
+      waitingKeyboard(template)
+    );
+    return;
+  }
+
+  if (template === config.TEMPLATES.ADD_ERROR && state.addErrorMode) {
+    state.status = 'waiting_link';
+    userState.set(ctx.from.id, state);
+    await editMenu(
+      ctx,
+      formatTemplateHint(template, templatePrompt(template), state.addErrorMode),
+      waitingKeyboard(template)
+    );
+    return;
+  }
+
+  await selectTemplate(ctx, template);
 });
 
 bot.action('template_error', (ctx) => selectTemplate(ctx, config.TEMPLATES.ERROR));
@@ -2440,7 +2473,7 @@ async function selectFriendVariant(ctx, templateName) {
     ctx,
     FRIENDPAGE_EXAMPLE_PATH,
     formatTemplateHint(templateName, templatePrompt(templateName)),
-    selectedTemplateKeyboard()
+    waitingKeyboard(templateName)
   );
 }
 
@@ -2459,8 +2492,8 @@ bot.action('qr_friend', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHint('📷QR Страница друга', 'Отправь ссылку на фейк.'),
-    selectedTemplateKeyboard()
+    formatHint(templateLabel(config.TEMPLATES.QR_FRIEND), 'Отправь ссылку на фейк.'),
+    waitingKeyboard(config.TEMPLATES.QR_FRIEND)
   );
 });
 bot.action('add_error_profile', (ctx) => selectAddErrorMode(ctx, 'profile'));
@@ -2479,7 +2512,7 @@ async function startCs2Flow(ctx, templateName) {
   await editMenu(
     ctx,
     formatTemplateHint(templateName, 'Отправь ссылку на фэйк.'),
-    cs2Keyboard()
+    waitingKeyboard(templateName)
   );
 }
 
@@ -2492,7 +2525,7 @@ bot.action('cs2_menu', async (ctx) => {
   state.cs2Profile = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHint('🎮CS2 Code', 'Выбери экран.'), cs2Keyboard());
+  await editMenu(ctx, formatHint('🎮 Коды · CS2', 'Выбери экран.'), cs2Keyboard());
 });
 
 bot.action('cs2_fake_code', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_WRONG_CODE));
@@ -2510,7 +2543,7 @@ async function startDotaFlow(ctx, templateName) {
   await editMenu(
     ctx,
     formatTemplateHint(templateName, 'Отправь френд-код друга.'),
-    dotaKeyboard()
+    waitingKeyboard(templateName)
   );
 }
 
@@ -2522,18 +2555,18 @@ bot.action('dota_menu', async (ctx) => {
   state.status = 'choosing_dota_template';
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHint('⚔️Dota2 Code', 'Выбери экран.'), dotaKeyboard());
+  await editMenu(ctx, formatHint('🎮 Коды · Dota2', 'Выбери экран.'), dotaKeyboard());
 });
 
 bot.action('dota_not_found', (ctx) => startDotaFlow(ctx, config.TEMPLATES.DOTA_NOT_FOUND));
 bot.action('dota_not_friends', (ctx) => startDotaFlow(ctx, config.TEMPLATES.DOTA_NOT_FRIENDS));
 
 // Nothing to render: the screen is a finished picture. Sent as a buffer, so the bot does not depend on
-// a file_id it has never seen.
-bot.action('dota_fake_code', async (ctx) => {
-  await ctx.answerCbQuery();
-
+// a file_id it has never seen. Kept as a named function: «Ещё раз» on the result replays exactly this.
+async function sendDotaFakeCode(ctx) {
   const state = getUserState(ctx);
+  state.staticScreen = 'dota_fake_code';
+  userState.set(ctx.from.id, state);
 
   let buffer;
 
@@ -2542,19 +2575,21 @@ bot.action('dota_fake_code', async (ctx) => {
   } catch {
     await editMenu(
       ctx,
-      formatHint('🎯Dota2 Fake Code', 'Файл assets/dota_fake_code.png не найден на сервере.'),
+      formatHint('🎯 Dota2 Fake Code', 'Файл assets/dota_fake_code.png не найден на сервере.'),
       dotaKeyboard()
     );
     return;
   }
 
-  await ctx.replyWithPhoto({ source: buffer });
+  await sendResult(ctx, buffer, {
+    label: '🎯 Dota2 Fake Code',
+    keyboard: resultTemplateKeyboard(config.TEMPLATES.DOTA_NOT_FOUND)
+  });
+}
 
-  state.status = 'choosing_dota_template';
-  state.template = null;
-  userState.set(ctx.from.id, state);
-
-  await replaceMenu(ctx, formatHint('⚔️Dota2 Code', 'Готово. Выбери экран.'), dotaKeyboard());
+bot.action('dota_fake_code', async (ctx) => {
+  await ctx.answerCbQuery();
+  await sendDotaFakeCode(ctx);
 });
 
 /* ---------- tracker ---------- */
@@ -2564,41 +2599,27 @@ function trackerMenuText(ctx) {
   const notifyOn = tracker.notifyEnabled(ctx.from.id);
 
   return formatHint(
-    '👁 Трекер',
+    '📡 Трекер',
     [
       `Профилей: ${profiles.length} из ${tracker.MAX_PER_USER}.`,
       `Уведомления: ${notifyOn ? 'включены' : 'выключены'}.`,
-      'Слежу за оффлайн, онлайном и игрой.'
+      'Слежу за оффлайном, онлайном и игрой.'
     ].join('\n')
   );
 }
 
-function trackerCardText(profile, steamId) {
+function trackerCardText(profile, steamId, tail) {
   return formatHint(
-    '👁 Трекер',
-    [
-      profile.name || steamId,
-      trackerStatusLabel(profile),
-      `SteamID: ${steamId}`
-    ].join('\n')
+    `📡 ${profile.name || steamId}`,
+    [trackerStatusLabel(profile), `SteamID: ${steamId}`, tail].filter(Boolean).join('\n')
   );
 }
 
 function trackerConfirmKeyboard() {
   return {
     inline_keyboard: [
-      [
-        {
-          text: '✅ Следить',
-          callback_data: 'tracker_confirm'
-        }
-      ],
-      [
-        {
-          text: '❌ Отмена',
-          callback_data: 'tracker_list'
-        }
-      ]
+      [b('✅ Следить', 'tracker_confirm')],
+      [b('← Назад', 'tracker_menu')]
     ]
   };
 }
@@ -2636,7 +2657,7 @@ bot.action('tracker_add', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHint('👁 Трекер', 'Отправь ссылку на профиль Steam или SteamID64.'),
+    formatHint('📡 Трекер', 'Отправь ссылку на профиль Steam или SteamID64.'),
     trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
   );
 });
@@ -2654,7 +2675,7 @@ bot.action('tracker_list', async (ctx) => {
   if (profiles.length === 0) {
     await editMenu(
       ctx,
-      formatHint('👁 Трекер', 'Пока пусто. Добавь профиль, чтобы следить за ним.'),
+      formatHint('📡 Трекер', 'Пока пусто. Добавь профиль, чтобы следить за ним.'),
       trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
     );
     return;
@@ -2662,7 +2683,7 @@ bot.action('tracker_list', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHint('👁 Трекер', `Профилей: ${profiles.length}. Выбери, чтобы открыть.`),
+    formatHint('📡 Трекер', `Профилей: ${profiles.length}. Выбери, чтобы открыть.`),
     trackerListKeyboard(profiles)
   );
 });
@@ -2719,7 +2740,7 @@ bot.action(/^tracker_remove_(7656119[0-9]{10})$/, async (ctx) => {
   state.trackerCandidate = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHint('👁 Трекер', 'Профиль удалён из списка.'), trackerKeyboard(tracker.notifyEnabled(ctx.from.id)));
+  await editMenu(ctx, formatHint('📡 Трекер', 'Профиль удалён из списка.'), trackerKeyboard(tracker.notifyEnabled(ctx.from.id)));
 });
 
 bot.action('tracker_confirm', async (ctx) => {
@@ -2746,7 +2767,7 @@ bot.action('tracker_confirm', async (ctx) => {
     await editMenu(
       ctx,
       formatHint(
-        '👁 Трекер',
+        '📡 Трекер',
         failure.includes('is not set')
           ? 'На сервере не задан STEAM_WEB_API_KEY.'
           : 'Steam не ответил. Попробуй добавить ещё раз.'
@@ -2768,7 +2789,7 @@ bot.action('tracker_confirm', async (ctx) => {
 
     await editMenu(
       ctx,
-      formatHint('👁 Трекер', reason),
+      formatHint('📡 Трекер', reason),
       trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
     );
     return;
@@ -2780,7 +2801,7 @@ bot.action('tracker_confirm', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHint('👁 Трекер', `Слежу за ${status.name || steamId}. Уведомления придут в этот чат.`),
+    formatHint('📡 Трекер', `Слежу за ${status.name || steamId}. Уведомления придут в этот чат.`),
     trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
   );
 });
@@ -2830,7 +2851,7 @@ async function applyCs2Ban(ctx, banText) {
   if (state.template !== config.TEMPLATES.CS2_BAN || !state.cs2Profile) {
     state.status = 'waiting_cs2_link';
     userState.set(ctx.from.id, state);
-    await replaceMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), cs2Keyboard());
+    await replaceMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), errorKeyboard(state.template));
     return;
   }
 
@@ -2840,23 +2861,24 @@ async function applyCs2Ban(ctx, banText) {
     state.status = 'processing_cs2_ban';
     userState.set(ctx.from.id, state);
 
-    progressMessage = await sendProgressMessage(
-      ctx,
-      `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nСтавлю ${banText}...`
-    );
+    progressMessage = await sendProgressMessage(ctx, `Ставлю ${banText}…`);
 
     const taskId = `${ctx.from.id}_cs2_ban_${Date.now()}`;
     const imageBuffer = await requestQueue.add(taskId, () =>
       processCs2Request(config.TEMPLATES.CS2_BAN, state.cs2Profile.sentUrl, { banText })
     );
 
-    await ctx.replyWithPhoto({ source: imageBuffer });
     await deleteProgressMessage(ctx, progressMessage);
 
     state.status = 'choosing_cs2_ban';
     userState.set(ctx.from.id, state);
 
-    await replaceMenu(ctx, formatStateHint(state, `Готово: ${banText}.`), cs2BanKeyboard());
+    // Время бана остаётся на кнопках: ту же ссылку можно прогнать другим сроком, не возвращаясь в меню.
+    await sendResult(ctx, imageBuffer, {
+      label: screenLabel(state.template, state.addErrorMode),
+      status: `⛔ ${banText}`,
+      keyboard: cs2BanKeyboard()
+    });
   } catch (error) {
     console.error('CS2 ban request error:', error);
     await deleteProgressMessage(ctx, progressMessage);
@@ -2893,7 +2915,7 @@ bot.action('cs2b_custom', async (ctx) => {
   if (state.template !== config.TEMPLATES.CS2_BAN || !state.cs2Profile) {
     state.status = 'waiting_cs2_link';
     userState.set(ctx.from.id, state);
-    await replaceMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), cs2Keyboard());
+    await replaceMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), errorKeyboard(state.template));
     return;
   }
 
@@ -2917,7 +2939,7 @@ bot.action('add_friend_code', async (ctx) => {
     await editMenu(
       ctx,
       formatStateHint(state, 'Сначала отправь ссылку для обработки.'),
-      selectedTemplateKeyboard()
+      errorKeyboard(state.template)
     );
     return;
   }
@@ -2927,7 +2949,7 @@ bot.action('add_friend_code', async (ctx) => {
   await editMenu(
     ctx,
     formatStateHint(state, 'Отправь код друга цифрами.'),
-    selectedTemplateKeyboard()
+    waitingKeyboard(state.template)
   );
 });
 
@@ -2944,7 +2966,7 @@ bot.on('text', async (ctx) => {
     if (!isCs2Template(state.template)) {
       state.status = 'choosing_cs2_template';
       userState.set(ctx.from.id, state);
-      await editMenu(ctx, formatHint('🎮CS2 Code', 'Выбери экран.'), cs2Keyboard());
+      await editMenu(ctx, formatHint('🎮 Коды · CS2', 'Выбери экран.'), cs2Keyboard());
       return;
     }
 
@@ -2954,7 +2976,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Отправь действующий http/https адрес.'),
-        cs2Keyboard()
+        waitingKeyboard(state.template)
       );
       return;
     }
@@ -2965,10 +2987,7 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_cs2_link';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(
-        ctx,
-        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nСобираю изображение...`
-      );
+      progressMessage = await sendProgressMessage(ctx, 'Собираю изображение…');
 
       const taskId = `${ctx.from.id}_cs2_link_${Date.now()}`;
 
@@ -3000,7 +3019,7 @@ bot.on('text', async (ctx) => {
 
         // A fresh message, not an edit of the link prompt: the question changed from "send a link" to
         // "send a code", and an edited caption reads as if nothing happened.
-        await replaceMenu(ctx, formatStateHint(state, 'Отправь френд-код кита.'), cs2Keyboard());
+        await replaceMenu(ctx, formatStateHint(state, 'Отправь френд-код кита.'), waitingKeyboard(state.template));
         return;
       }
 
@@ -3008,14 +3027,16 @@ bot.on('text', async (ctx) => {
         processCs2Request(config.TEMPLATES.CS2_WRONG_CODE, url)
       );
 
-      await ctx.replyWithPhoto({ source: imageBuffer });
       await deleteProgressMessage(ctx, progressMessage);
 
       state.status = 'waiting_cs2_link';
       state.cs2Profile = null;
       userState.set(ctx.from.id, state);
 
-      await replaceMenu(ctx, formatStateHint(state, 'Готово.'), cs2Keyboard());
+      await sendResult(ctx, imageBuffer, {
+        label: screenLabel(state.template, state.addErrorMode),
+        keyboard: resultTemplateKeyboard(state.template)
+      });
     } catch (error) {
       console.error('CS2 link request error:', error);
       await deleteProgressMessage(ctx, progressMessage);
@@ -3026,7 +3047,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Не удалось обработать ссылку. Отправь ссылку ещё раз.'),
-        cs2Keyboard()
+        errorKeyboard(state.template)
       );
     }
 
@@ -3037,14 +3058,14 @@ bot.on('text', async (ctx) => {
     const friendCode = url.replace(/\s+/g, '').toUpperCase();
 
     if (!/^[A-Z0-9-]{3,32}$/.test(friendCode)) {
-      await editMenu(ctx, formatStateHint(state, 'Отправь код вида ABCDE-FGHI.'), cs2Keyboard());
+      await editMenu(ctx, formatStateHint(state, 'Отправь код вида ABCDE-FGHI.'), waitingKeyboard(state.template));
       return;
     }
 
     if (!state.cs2Profile) {
       state.status = 'waiting_cs2_link';
       userState.set(ctx.from.id, state);
-      await editMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), cs2Keyboard());
+      await editMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), errorKeyboard(state.template));
       return;
     }
 
@@ -3054,24 +3075,23 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_cs2_code';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(
-        ctx,
-        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nДобавляю код ${friendCode}...`
-      );
+      progressMessage = await sendProgressMessage(ctx, `Добавляю код ${friendCode}…`);
 
       const taskId = `${ctx.from.id}_cs2_code_${Date.now()}`;
       const imageBuffer = await requestQueue.add(taskId, () =>
         processCs2Request(config.TEMPLATES.CS2_NOT_FOUND, state.cs2Profile.sentUrl, friendCode)
       );
 
-      await ctx.replyWithPhoto({ source: imageBuffer });
       await deleteProgressMessage(ctx, progressMessage);
 
       state.status = 'waiting_cs2_link';
       state.cs2Profile = null;
       userState.set(ctx.from.id, state);
 
-      await replaceMenu(ctx, formatStateHint(state, 'Готово.'), cs2Keyboard());
+      await sendResult(ctx, imageBuffer, {
+        label: screenLabel(state.template, state.addErrorMode),
+        keyboard: resultTemplateKeyboard(state.template)
+      });
     } catch (error) {
       console.error('CS2 code request error:', error);
       await deleteProgressMessage(ctx, progressMessage);
@@ -3082,7 +3102,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Не удалось собрать изображение. Отправь код ещё раз.'),
-        cs2Keyboard()
+        errorKeyboard(state.template)
       );
     }
 
@@ -3096,7 +3116,7 @@ bot.on('text', async (ctx) => {
       await replaceMenu(
         ctx,
         formatStateHint(state, 'Отправь френд-код: цифры или буквы, до 32 символов.'),
-        selectedTemplateKeyboard()
+        waitingKeyboard(state.template)
       );
       return;
     }
@@ -3107,7 +3127,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Сначала отправь ссылку на фейк.'),
-        selectedTemplateKeyboard()
+        errorKeyboard(state.template)
       );
       return;
     }
@@ -3118,24 +3138,24 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_add_error_code';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(
-        ctx,
-        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nСтавлю код ${code}...`
-      );
+      progressMessage = await sendProgressMessage(ctx, `Ставлю код ${code}…`);
 
       const taskId = `${ctx.from.id}_add_error_code_${Date.now()}`;
       const imageBuffer = await requestQueue.add(taskId, () =>
         processAddErrorPhone(state.addErrorData, code, state.addErrorData.sentUrl || '')
       );
 
-      await ctx.replyWithPhoto({ source: imageBuffer });
       await deleteProgressMessage(ctx, progressMessage);
 
       state.status = 'waiting_link';
       state.addErrorData = null;
       userState.set(ctx.from.id, state);
 
-      await replaceMenu(ctx, formatStateHint(state, 'Готово.'), selectedTemplateKeyboard());
+      await sendResult(ctx, imageBuffer, {
+        label: screenLabel(state.template, state.addErrorMode),
+        status: `✅ Код ${code} принят`,
+        keyboard: resultTemplateKeyboard(state.template)
+      });
     } catch (error) {
       console.error('Add-error phone code error:', error);
       await deleteProgressMessage(ctx, progressMessage);
@@ -3146,7 +3166,7 @@ bot.on('text', async (ctx) => {
       await replaceMenu(
         ctx,
         formatStateHint(state, 'Не удалось собрать изображение. Отправь код ещё раз.'),
-        selectedTemplateKeyboard()
+        errorKeyboard(state.template)
       );
     }
 
@@ -3159,8 +3179,8 @@ bot.on('text', async (ctx) => {
     } catch {
       await editMenu(
         ctx,
-        formatHint('📷QR Страница друга', 'Отправь действующий http/https адрес.'),
-        selectedTemplateKeyboard()
+        formatHint(templateLabel(config.TEMPLATES.QR_FRIEND), 'Отправь действующий http/https адрес.'),
+        waitingKeyboard(config.TEMPLATES.QR_FRIEND)
       );
       return;
     }
@@ -3171,18 +3191,20 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_qr';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(ctx, 'Шаблон: 📷QR Страница друга\nСобираю изображение...');
+      progressMessage = await sendProgressMessage(ctx, 'Собираю QR-страницу…');
 
       const taskId = `${ctx.from.id}_qr_${Date.now()}`;
       const imageBuffer = await requestQueue.add(taskId, () => processQrFriendRequest(url));
 
-      await ctx.replyWithPhoto({ source: imageBuffer });
       await deleteProgressMessage(ctx, progressMessage);
 
       state.status = 'waiting_qr_link';
       userState.set(ctx.from.id, state);
 
-      await replaceMenu(ctx, formatHint('📷QR Страница друга', 'Готово.'), selectedTemplateKeyboard());
+      await sendResult(ctx, imageBuffer, {
+        label: templateLabel(config.TEMPLATES.QR_FRIEND),
+        keyboard: resultTemplateKeyboard(config.TEMPLATES.QR_FRIEND)
+      });
     } catch (error) {
       console.error('QR friend request error:', error);
       await deleteProgressMessage(ctx, progressMessage);
@@ -3192,8 +3214,8 @@ bot.on('text', async (ctx) => {
 
       await editMenu(
         ctx,
-        formatHint('📷QR Страница друга', 'Не удалось собрать изображение. Отправь ссылку ещё раз.'),
-        selectedTemplateKeyboard()
+        formatHint(templateLabel(config.TEMPLATES.QR_FRIEND), 'Не удалось собрать изображение. Отправь ссылку ещё раз.'),
+        errorKeyboard(config.TEMPLATES.QR_FRIEND)
       );
     }
 
@@ -3215,7 +3237,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatHint(
-          '👁 Трекер',
+          '📡 Трекер',
           'Не нашёл такой профиль. Отправь ссылку steamcommunity.com/profiles/… или SteamID64.'
         ),
         trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
@@ -3226,7 +3248,7 @@ bot.on('text', async (ctx) => {
     if (tracker.listProfiles(ctx.from.id).some((profile) => profile.steamId === steamId)) {
       await editMenu(
         ctx,
-        formatHint('👁 Трекер', 'Этот профиль уже в списке.'),
+        formatHint('📡 Трекер', 'Этот профиль уже в списке.'),
         trackerProfileKeyboard(steamId)
       );
       return;
@@ -3252,7 +3274,7 @@ bot.on('text', async (ctx) => {
 
       await editMenu(
         ctx,
-        formatHint('👁 Трекер', reason),
+        formatHint('📡 Трекер', reason),
         trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
       );
       return;
@@ -3264,7 +3286,7 @@ bot.on('text', async (ctx) => {
 
     await editMenu(
       ctx,
-      `${trackerCardText(status, steamId)}\n\nСледить за ним?`,
+      trackerCardText(status, steamId, 'Следить за ним?'),
       trackerConfirmKeyboard()
     );
     return;
@@ -3274,7 +3296,7 @@ bot.on('text', async (ctx) => {
     if (!isDotaTemplate(state.template)) {
       state.status = 'choosing_dota_template';
       userState.set(ctx.from.id, state);
-      await editMenu(ctx, formatHint('⚔️Dota2 Code', 'Выбери экран.'), dotaKeyboard());
+      await editMenu(ctx, formatHint('🎮 Коды · Dota2', 'Выбери экран.'), dotaKeyboard());
       return;
     }
 
@@ -3284,7 +3306,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Отправь френд-код: цифры или буквы, до 32 символов.'),
-        dotaKeyboard()
+        waitingKeyboard(state.template)
       );
       return;
     }
@@ -3295,23 +3317,22 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_dota_code';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(
-        ctx,
-        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nСобираю изображение...`
-      );
+      progressMessage = await sendProgressMessage(ctx, 'Собираю изображение…');
 
       const taskId = `${ctx.from.id}_dota_${Date.now()}`;
       const imageBuffer = await requestQueue.add(taskId, () =>
         processDotaRequest(state.template, friendCode)
       );
 
-      await ctx.replyWithPhoto({ source: imageBuffer });
       await deleteProgressMessage(ctx, progressMessage);
 
       state.status = 'waiting_dota_code';
       userState.set(ctx.from.id, state);
 
-      await replaceMenu(ctx, formatStateHint(state, 'Готово.'), dotaKeyboard());
+      await sendResult(ctx, imageBuffer, {
+        label: screenLabel(state.template, state.addErrorMode),
+        keyboard: resultTemplateKeyboard(state.template)
+      });
     } catch (error) {
       console.error('Dota request error:', error);
       await deleteProgressMessage(ctx, progressMessage);
@@ -3322,7 +3343,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Не удалось собрать изображение. Отправь код ещё раз.'),
-        dotaKeyboard()
+        errorKeyboard(state.template)
       );
     }
 
@@ -3361,7 +3382,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Сначала отправь ссылку на фейк.'),
-        selectedTemplateKeyboard()
+        errorKeyboard(state.template)
       );
       return;
     }
@@ -3372,27 +3393,23 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_steam_china_code';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(
-        ctx,
-        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nДобавляю код друга...`
-      );
+      progressMessage = await sendProgressMessage(ctx, 'Добавляю код друга…');
 
       const taskId = `${ctx.from.id}_steam_china_code_${Date.now()}`;
       const imageBuffer = await requestQueue.add(taskId, () =>
         processFriendCodeRequest(state.lastSteamChinaData, friendCodeInput, config.TEMPLATES.STEAM_CHINA)
       );
 
-      await ctx.replyWithPhoto({ source: imageBuffer });
       await deleteProgressMessage(ctx, progressMessage);
 
       state.status = 'waiting_link';
       state.lastSteamChinaData = null;
       userState.set(ctx.from.id, state);
-      await replaceMenu(
-        ctx,
-        formatStateHint(state, '✅ Скриншот готов!'),
-        resultTemplateKeyboard(state.template)
-      );
+
+      await sendResult(ctx, imageBuffer, {
+        label: screenLabel(state.template, state.addErrorMode),
+        keyboard: resultTemplateKeyboard(state.template)
+      });
     } catch (error) {
       console.error('Steam China code request error:', error);
       await deleteProgressMessage(ctx, progressMessage);
@@ -3412,7 +3429,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Отправь код друга только цифрами.'),
-        selectedTemplateKeyboard()
+        waitingKeyboard(state.template)
       );
       return;
     }
@@ -3423,7 +3440,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Сначала отправь ссылку для обработки.'),
-        selectedTemplateKeyboard()
+        errorKeyboard(state.template)
       );
       return;
     }
@@ -3434,26 +3451,22 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_friend_code';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(
-        ctx,
-        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nДобавляю код друга...`
-      );
+      progressMessage = await sendProgressMessage(ctx, 'Добавляю код друга…');
 
       const taskId = `${ctx.from.id}_friend_code_${Date.now()}`;
       const imageBuffer = await requestQueue.add(taskId, () =>
         processFriendCodeRequest(state.lastFriendPageData, friendCodeInput, state.template)
       );
 
-      await ctx.replyWithPhoto({ source: imageBuffer });
       await deleteProgressMessage(ctx, progressMessage);
 
       state.status = 'waiting_link';
       userState.set(ctx.from.id, state);
-      await replaceMenu(
-        ctx,
-        formatStateHint(state, '✅ Скриншот готов!'),
-        resultTemplateKeyboard(state.template, true)
-      );
+
+      await sendResult(ctx, imageBuffer, {
+        label: screenLabel(state.template, state.addErrorMode),
+        keyboard: resultTemplateKeyboard(state.template, true)
+      });
     } catch (error) {
       console.error('Friend code request error:', error);
       await deleteProgressMessage(ctx, progressMessage);
@@ -3463,7 +3476,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Ошибка при добавлении кода. Отправь код друга цифрами еще раз.'),
-        selectedTemplateKeyboard()
+        waitingKeyboard(state.template)
       );
     }
 
@@ -3473,7 +3486,7 @@ bot.on('text', async (ctx) => {
   if (!state?.template) {
     state.status = 'choosing_template';
     userState.set(ctx.from.id, state);
-    await ctx.reply(formatHint('Меню', 'Сначала выбери шаблон.'), { parse_mode: 'HTML' });
+    await ctx.reply(formatHint('🏠 Меню', 'Сначала выбери раздел.'), { parse_mode: 'HTML' });
     return;
   }
 
@@ -3503,7 +3516,7 @@ bot.on('text', async (ctx) => {
     return editMenu(
       ctx,
       formatStateHint(state, 'Отправь корректную http/https ссылку.'),
-      selectedTemplateKeyboard()
+      waitingKeyboard(state.template)
     );
   }
 
@@ -3514,10 +3527,7 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_add_error_link';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(
-        ctx,
-        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nЧитаю профиль...`
-      );
+      progressMessage = await sendProgressMessage(ctx, 'Читаю профиль…');
 
       const taskId = `${ctx.from.id}_add_error_link_${Date.now()}`;
       const pageData = await requestQueue.add(taskId, () => loadFriendPageData(url));
@@ -3531,7 +3541,7 @@ bot.on('text', async (ctx) => {
       await replaceMenu(
         ctx,
         formatStateHint(state, 'Отправь френд-код, который не приняли.'),
-        selectedTemplateKeyboard()
+        waitingKeyboard(state.template)
       );
     } catch (error) {
       console.error('Add-error phone link error:', error);
@@ -3544,7 +3554,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Не удалось прочитать профиль. Отправь ссылку ещё раз.'),
-        selectedTemplateKeyboard()
+        errorKeyboard(state.template)
       );
     }
 
@@ -3558,10 +3568,7 @@ bot.on('text', async (ctx) => {
       state.status = 'processing_steam_china_link';
       userState.set(ctx.from.id, state);
 
-      progressMessage = await sendProgressMessage(
-        ctx,
-        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nОбрабатываю ссылку...`
-      );
+      progressMessage = await sendProgressMessage(ctx, 'Читаю профиль…');
 
       const taskId = `${ctx.from.id}_steam_china_link_${Date.now()}`;
       const pageData = await requestQueue.add(taskId, () => loadFriendPageData(url));
@@ -3581,7 +3588,7 @@ bot.on('text', async (ctx) => {
       await editMenu(
         ctx,
         formatStateHint(state, 'Ошибка при обработке страницы. Отправь другую ссылку.'),
-        selectedTemplateKeyboard()
+        errorKeyboard(state.template)
       );
     }
 
@@ -3594,27 +3601,23 @@ bot.on('text', async (ctx) => {
     state.status = 'processing';
     userState.set(ctx.from.id, state);
 
-    progressMessage = await sendProgressMessage(
-      ctx,
-      `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nОбрабатываю ссылку...\nОчередь: ${requestQueue.getQueueLength()}, активных: ${requestQueue.getActiveCount()}`
-    );
+    progressMessage = await sendProgressMessage(ctx, 'Читаю профиль…');
 
     const taskId = `${ctx.from.id}_${Date.now()}`;
     const { imageBuffer, pageData } = await requestQueue.add(taskId, () =>
       processRequest(url, state.template, { addErrorMode: state.addErrorMode })
     );
 
-    await ctx.replyWithPhoto({ source: imageBuffer });
     await deleteProgressMessage(ctx, progressMessage);
 
     state.status = 'waiting_link';
     state.lastFriendPageData = isFriendPageTemplate(state.template) ? pageData : null;
     userState.set(ctx.from.id, state);
-    await replaceMenu(
-      ctx,
-      formatStateHint(state, '✅ Скриншот готов!'),
-      resultTemplateKeyboard(state.template, Boolean(state.lastFriendPageData))
-    );
+
+    await sendResult(ctx, imageBuffer, {
+      label: screenLabel(state.template, state.addErrorMode),
+      keyboard: resultTemplateKeyboard(state.template, Boolean(state.lastFriendPageData))
+    });
   } catch (error) {
     console.error('Request error:', error);
     await deleteProgressMessage(ctx, progressMessage);
@@ -3624,7 +3627,7 @@ bot.on('text', async (ctx) => {
     await editMenu(
       ctx,
       formatStateHint(state, 'Ошибка при обработке страницы. Отправь другую ссылку для обработки.'),
-      selectedTemplateKeyboard()
+      errorKeyboard(state.template)
     );
   }
 });
