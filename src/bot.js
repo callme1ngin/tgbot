@@ -1902,7 +1902,9 @@ bot.on('text', async (ctx) => {
         state.cs2Profile = profile;
         userState.set(ctx.from.id, state);
 
-        await editMenu(ctx, formatStateHint(state, 'Отправь френд-код кита.'), cs2Keyboard());
+        // A fresh message, not an edit of the link prompt: the question changed from "send a link" to
+        // "send a code", and an edited caption reads as if nothing happened.
+        await replaceMenu(ctx, formatStateHint(state, 'Отправь френд-код кита.'), cs2Keyboard());
         return;
       }
 
