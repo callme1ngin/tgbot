@@ -23,6 +23,9 @@ let db = { users: {}, state: {} };
 let writeChain = Promise.resolve();
 let timer = null;
 let polling = false;
+let lastPollAt = 0;
+let lastError = '';
+let lastChanges = 0;
 
 function apiKey() {
   return String(process.env.STEAM_WEB_API_KEY || '').trim();
@@ -325,7 +328,8 @@ async function pollOnce() {
 
 function start(onChanges) {
   if (!apiKey()) {
-    console.warn('tracker: STEAM_WEB_API_KEY is not set, presence is not tracked');
+    lastError = 'STEAM_WEB_API_KEY is not set';
+    console.warn(`tracker: ${lastError}, presence is not tracked`);
     return false;
   }
 
@@ -335,6 +339,7 @@ function start(onChanges) {
 
   const tick = async () => {
     if (polling) {
+      console.warn('tracker: previous poll is still running, skipping this cycle');
       return;
     }
 
@@ -343,22 +348,50 @@ function start(onChanges) {
     try {
       const changes = await pollOnce();
 
+      lastPollAt = Math.floor(Date.now() / 1000);
+      lastError = '';
+      lastChanges = changes.length;
+
+      if (changes.length > 0) {
+        console.log(
+          `tracker: ${changes.length} change(s) — ` +
+            changes.map((change) => `${change.to.name || change.steamId} ${change.to.status}${change.to.game ? ' ' + change.to.game : ''}`).join(', ')
+        );
+      }
+
       if (changes.length > 0 && typeof onChanges === 'function') {
         await onChanges(changes).catch((error) => {
           console.warn(`tracker: notification failed (${error.message})`);
         });
       }
     } catch (error) {
-      console.warn(`tracker: poll failed (${error.message})`);
+      lastError = String(error?.message || error);
+      console.warn(`tracker: poll failed (${lastError})`);
     } finally {
       polling = false;
     }
   };
 
   timer = setInterval(tick, POLL_MS);
+  console.log(
+    `tracker: polling every ${Math.round(POLL_MS / 1000)}s, ` +
+      `${Object.keys(db.state).length} profile(s), ${Object.keys(db.users).length} follower(s)`
+  );
   tick();
 
   return true;
+}
+
+function status() {
+  return {
+    profiles: Object.keys(db.state).length,
+    followers: Object.keys(db.users).length,
+    polling,
+    intervalMs: POLL_MS,
+    lastPollAt,
+    lastChanges,
+    lastError
+  };
 }
 
 function stop() {
@@ -384,6 +417,7 @@ module.exports = {
   resolveProfileInput,
   freshStatus,
   pollOnce,
+  status,
   start,
   stop
 };

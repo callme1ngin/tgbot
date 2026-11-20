@@ -2076,7 +2076,8 @@ function startHealthServer() {
         active: requestQueue.getActiveCount(),
         waiting: requestQueue.getQueueLength()
       },
-      browser: browserPool.getStats()
+      browser: browserPool.getStats(),
+      tracker: tracker.status()
     }));
   });
 
@@ -2324,7 +2325,13 @@ bot.action(/^tracker_refresh_(7656119[0-9]{10})$/, async (ctx) => {
   await ctx.answerCbQuery();
 
   const steamId = ctx.match[1];
-  const fresh = await tracker.freshStatus(steamId).catch(() => null);
+
+  // A manual refresh runs the same pass the timer runs, so the stored state moves too: otherwise the
+  // card shows a fresh status and the list behind it keeps the old one.
+  await tracker.pollOnce().catch((error) => {
+    console.warn(`tracker: manual refresh failed (${error.message})`);
+  });
+
   const stored = tracker.listProfiles(ctx.from.id).find((item) => item.steamId === steamId);
 
   if (!stored) {
@@ -2332,6 +2339,7 @@ bot.action(/^tracker_refresh_(7656119[0-9]{10})$/, async (ctx) => {
     return;
   }
 
+  const fresh = await tracker.freshStatus(steamId).catch(() => null);
   const profile = fresh ? { ...stored, ...fresh } : stored;
 
   await editMenu(
