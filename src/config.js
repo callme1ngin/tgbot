@@ -8,7 +8,8 @@ module.exports = {
     STEAM_CHINA: 'steamchina.bundle',
     // CS2 screens: canvas templates that take their data through window.renderProfile().
     CS2_WRONG_CODE: 'cs2_wrong_code',
-    CS2_NOT_FOUND: 'cs2_not_found'
+    CS2_NOT_FOUND: 'cs2_not_found',
+    CS2_BAN: 'cs2_ban'
   },
 
   SELECTORS: {

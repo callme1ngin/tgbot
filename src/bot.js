@@ -26,12 +26,9 @@ const FRIEND_SCREENSHOT_VIEWPORT = {
   height: Number(process.env.FRIEND_SCREENSHOT_HEIGHT || 720)
 };
 
-// The CS2 templates draw into a canvas of a fixed size, so the viewport has to match it exactly:
-// the page scales the canvas to the viewport, and an element screenshot of a scaled canvas is blurry.
-const CS2_VIEWPORTS = {
-  [config.TEMPLATES.CS2_WRONG_CODE]: { width: 1850, height: 1079 },
-  [config.TEMPLATES.CS2_NOT_FOUND]: { width: 1844, height: 1079 }
-};
+// The CS2 templates draw into a canvas of a fixed size and scale it to the viewport, so the viewport
+// is set from the canvas itself right before the screenshot — one size per template, none hardcoded.
+const CS2_CANVAS = 'canvas';
 
 const browserPool = new BrowserPool({
   maxContexts: Number(process.env.BROWSER_CONTEXTS || 2),
@@ -1129,7 +1126,8 @@ async function processFriendCodeRequest(pageData, friendCodeInput, templateName 
 function isCs2Template(templateName) {
   return (
     templateName === config.TEMPLATES.CS2_WRONG_CODE ||
-    templateName === config.TEMPLATES.CS2_NOT_FOUND
+    templateName === config.TEMPLATES.CS2_NOT_FOUND ||
+    templateName === config.TEMPLATES.CS2_BAN
   );
 }
 
@@ -1175,15 +1173,11 @@ async function loadCs2Profile(url) {
   };
 }
 
-async function renderCs2Screenshot({ templateName, nickname, avatarDataUrl, friendCode }) {
+async function renderCs2Screenshot({ templateName, payload }) {
   const template = await loadTemplate(templateName);
-  const viewport = CS2_VIEWPORTS[templateName] || CS2_VIEWPORTS[config.TEMPLATES.CS2_WRONG_CODE];
-  const canvasSelector = templateName === config.TEMPLATES.CS2_NOT_FOUND ? '#cs2-image' : '#image';
   const page = await browserPool.getPage();
 
   try {
-    await page.setViewportSize(viewport);
-
     await page.setContent(template.html, {
       waitUntil: 'domcontentloaded',
       timeout: 15000
@@ -1193,30 +1187,37 @@ async function renderCs2Screenshot({ templateName, nickname, avatarDataUrl, frie
       timeout: 15000
     });
 
+    // The canvas carries the real size, so the viewport is set from it instead of a table of guesses.
+    // After the resize the page lays the canvas out at 1:1 and the element screenshot stays sharp.
+    const size = await page.evaluate((selector) => {
+      const canvas = document.querySelector(selector);
+
+      return canvas ? { width: canvas.width, height: canvas.height } : null;
+    }, CS2_CANVAS);
+
+    if (!size || !size.width || !size.height) {
+      throw new Error(`no canvas in ${templateName}`);
+    }
+
+    await page.setViewportSize(size);
+
     // renderProfile resolves only after the background, the avatar and the fonts are ready.
-    // The two templates name the friend code differently — `friendCode` on the wrong-code screen,
-    // `code` on the not-found one — so both keys are sent and each template picks its own.
-    const rendered = await page.evaluate(async (payload) => {
+    const rendered = await page.evaluate(async (data) => {
       try {
-        return await window.renderProfile(payload);
+        return await window.renderProfile(data);
       } catch (error) {
         return `render error: ${error?.message || error}`;
       }
-    }, {
-      nickname,
-      avatarDataUrl: avatarDataUrl || '',
-      friendCode: friendCode || '',
-      code: friendCode || ''
-    });
+    }, payload);
 
     if (rendered !== true) {
       throw new Error(String(rendered || 'template refused to render'));
     }
 
-    const canvas = await page.$(canvasSelector);
+    const canvas = await page.$(CS2_CANVAS);
 
     if (!canvas) {
-      throw new Error(`canvas ${canvasSelector} is missing in ${templateName}`);
+      throw new Error(`canvas ${CS2_CANVAS} is missing in ${templateName}`);
     }
 
     return await canvas.screenshot({ type: 'png' });
@@ -1225,8 +1226,10 @@ async function renderCs2Screenshot({ templateName, nickname, avatarDataUrl, frie
   }
 }
 
-async function processCs2Request(templateName, url, friendCode = '') {
-  const cacheKey = screenshotCache.generateKey(url, `${templateName}:${friendCode}`, {
+async function processCs2Request(templateName, url, options = {}) {
+  const friendCode = String(options.friendCode || '');
+  const banText = String(options.banText || '');
+  const cacheKey = screenshotCache.generateKey(url, `${templateName}:${friendCode}:${banText}`, {
     renderVersion: SCREENSHOT_CACHE_VERSION
   });
   const cached = screenshotCache.get(cacheKey);
@@ -1245,11 +1248,18 @@ async function processCs2Request(templateName, url, friendCode = '') {
     console.warn(`CS2 avatar fetch failed (${templateName}): ${error.message}`);
   }
 
+  // One payload for every CS2 screen: each template reads the keys it knows and ignores the rest.
+  // `friendCode`/`code` are the two names the code screens use, `banText`/`text` the ban one.
   const imageBuffer = await renderCs2Screenshot({
     templateName,
-    nickname: profile.nickname,
-    avatarDataUrl,
-    friendCode
+    payload: {
+      nickname: profile.nickname,
+      avatarDataUrl,
+      friendCode,
+      code: friendCode,
+      banText,
+      text: banText
+    }
   });
 
   screenshotCache.set(cacheKey, imageBuffer);
@@ -1326,6 +1336,49 @@ function cs2Keyboard() {
   };
 }
 
+// Durations of the ban screen, in the order the operator sees them. The label is what gets painted
+// into the picture; the key is what callback_data can carry.
+const CS2_BAN_DURATIONS = {
+  '30m': '30 Mins',
+  '1h': '1 Hour',
+  '2h': '2 Hours',
+  '5h': '5 Hours',
+  '23h': '23 Hours',
+  '1d': '1 Day',
+  '3d': '3 Days',
+  '7d': '7 Days'
+};
+
+function cs2BanKeyboard() {
+  const pairs = Object.entries(CS2_BAN_DURATIONS);
+  const rows = [];
+
+  for (let i = 0; i < pairs.length; i += 2) {
+    rows.push(
+      pairs.slice(i, i + 2).map(([key, label]) => ({
+        text: label,
+        callback_data: `cs2b_${key}`
+      }))
+    );
+  }
+
+  rows.push([
+    {
+      text: '✏️Custom',
+      callback_data: 'cs2b_custom'
+    }
+  ]);
+
+  rows.push([
+    {
+      text: 'Сменить шаблон',
+      callback_data: 'show_templates'
+    }
+  ]);
+
+  return { inline_keyboard: rows };
+}
+
 function templateLabel(templateName) {
   if (templateName === config.TEMPLATES.FRIEND) {
     return '📨Страница друга';
@@ -1349,6 +1402,10 @@ function templateLabel(templateName) {
 
   if (templateName === config.TEMPLATES.CS2_NOT_FOUND) {
     return '❓CS2 Code Not found';
+  }
+
+  if (templateName === config.TEMPLATES.CS2_BAN) {
+    return '⛔CS2 Ban';
   }
 
   return templateName;
@@ -1376,6 +1433,10 @@ function templatePrompt(templateName) {
   }
 
   if (templateName === config.TEMPLATES.CS2_NOT_FOUND) {
+    return 'Отправь ссылку на фэйк.';
+  }
+
+  if (templateName === config.TEMPLATES.CS2_BAN) {
     return 'Отправь ссылку на фэйк.';
   }
 
@@ -1820,10 +1881,91 @@ bot.action('cs2_menu', async (ctx) => {
 
 bot.action('cs2_fake_code', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_WRONG_CODE));
 bot.action('cs2_not_found', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_NOT_FOUND));
+bot.action('cs2_ban', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_BAN));
 
-bot.action('cs2_ban', async (ctx) => {
+// Renders one ban screen and leaves the durations on screen, so the operator can try another value
+// without walking the whole flow again.
+async function applyCs2Ban(ctx, banText) {
+  const state = getUserState(ctx);
+
+  if (state.template !== config.TEMPLATES.CS2_BAN || !state.cs2Profile) {
+    state.status = 'waiting_cs2_link';
+    userState.set(ctx.from.id, state);
+    await replaceMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), cs2Keyboard());
+    return;
+  }
+
+  let progressMessage;
+
+  try {
+    state.status = 'processing_cs2_ban';
+    userState.set(ctx.from.id, state);
+
+    progressMessage = await sendProgressMessage(
+      ctx,
+      `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nСтавлю ${banText}...`
+    );
+
+    const taskId = `${ctx.from.id}_cs2_ban_${Date.now()}`;
+    const imageBuffer = await requestQueue.add(taskId, () =>
+      processCs2Request(config.TEMPLATES.CS2_BAN, state.cs2Profile.sentUrl, { banText })
+    );
+
+    await ctx.replyWithPhoto({ source: imageBuffer });
+    await deleteProgressMessage(ctx, progressMessage);
+
+    state.status = 'choosing_cs2_ban';
+    userState.set(ctx.from.id, state);
+
+    await replaceMenu(ctx, formatStateHint(state, `Готово: ${banText}.`), cs2BanKeyboard());
+  } catch (error) {
+    console.error('CS2 ban request error:', error);
+    await deleteProgressMessage(ctx, progressMessage);
+
+    state.status = 'choosing_cs2_ban';
+    userState.set(ctx.from.id, state);
+
+    const missing = /Template not found/i.test(String(error?.message || ''));
+    await replaceMenu(
+      ctx,
+      formatStateHint(
+        state,
+        missing
+          ? 'Экран CS2 Ban ещё не загружен на сервер: нет templates/cs2_ban.html.'
+          : 'Не удалось собрать изображение. Выбери время ещё раз.'
+      ),
+      cs2BanKeyboard()
+    );
+  }
+}
+
+for (const [key, label] of Object.entries(CS2_BAN_DURATIONS)) {
+  bot.action(`cs2b_${key}`, async (ctx) => {
+    await ctx.answerCbQuery();
+    await applyCs2Ban(ctx, label);
+  });
+}
+
+bot.action('cs2b_custom', async (ctx) => {
   await ctx.answerCbQuery();
-  await editMenu(ctx, formatHint('⛔CS2 Ban', 'Экран ещё в работе.'), cs2Keyboard());
+
+  const state = getUserState(ctx);
+
+  if (state.template !== config.TEMPLATES.CS2_BAN || !state.cs2Profile) {
+    state.status = 'waiting_cs2_link';
+    userState.set(ctx.from.id, state);
+    await replaceMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), cs2Keyboard());
+    return;
+  }
+
+  state.status = 'waiting_cs2_ban_text';
+  userState.set(ctx.from.id, state);
+
+  await replaceMenu(
+    ctx,
+    formatStateHint(state, 'Напиши текст бана — он встанет на место времени.'),
+    cs2BanKeyboard()
+  );
 });
 
 bot.action('add_friend_code', async (ctx) => {
@@ -1890,6 +2032,21 @@ bot.on('text', async (ctx) => {
       );
 
       const taskId = `${ctx.from.id}_cs2_link_${Date.now()}`;
+
+      // The ban screen asks for the duration next: the link is only the identity, and the duration is
+      // picked from a keyboard on the message that follows.
+      if (state.template === config.TEMPLATES.CS2_BAN) {
+        const profile = await requestQueue.add(taskId, () => loadCs2Profile(url));
+
+        await deleteProgressMessage(ctx, progressMessage);
+
+        state.status = 'choosing_cs2_ban';
+        state.cs2Profile = profile;
+        userState.set(ctx.from.id, state);
+
+        await replaceMenu(ctx, formatStateHint(state, 'Выберите время бана:'), cs2BanKeyboard());
+        return;
+      }
 
       // This screen carries the friend code, so the link is only the first half: keep the profile and
       // ask for the code instead of rendering right away.
@@ -1990,6 +2147,22 @@ bot.on('text', async (ctx) => {
       );
     }
 
+    return;
+  }
+
+  if (state.status === 'waiting_cs2_ban_text') {
+    const banText = url.replace(/\s+/g, ' ').trim().slice(0, 48);
+
+    if (banText === '') {
+      await replaceMenu(
+        ctx,
+        formatStateHint(state, 'Напиши текст бана — он встанет на место времени.'),
+        cs2BanKeyboard()
+      );
+      return;
+    }
+
+    await applyCs2Ban(ctx, banText);
     return;
   }
 
