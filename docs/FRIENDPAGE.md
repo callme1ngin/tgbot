@@ -19,7 +19,10 @@ git add template-sources templates/friendpage.bundle.html
 из панели (`ch/v2/eu/auth/view.html`), с нашими правками колокола.
 
 Итог: логотип, `STORE / COMMUNITY / <ник> / CHAT / SUPPORT`, справа серая кнопка `Install Steam`,
-плашка с колоколом, ник со стрелкой и аватар 32×32.
+плашка с колоколом, ник со стрелкой, баланс `$3.87` под ником и аватар 32×32.
+
+Активная вкладка — вкладка ника (`supernav_active` на `.menuitem.username`), не `COMMUNITY`: страница
+это профиль, а не лента сообщества.
 
 ## Как вставлено
 
@@ -39,6 +42,25 @@ git add template-sources templates/friendpage.bundle.html
 Логотип шапки ссылался на `/auth/cdn/…svg` — путь есть только на панели. Файл скопирован в
 `template-sources/friendpage/friendpage_files/logo_steam.svg`, ссылка стала относительной, бандлер
 вшивает его как data URI вместе с остальными ассетами (21 штука).
+
+## Колокол
+
+На этой странице лежит `greenenvelope.css` — стили React-кнопки уведомлений, и они позиционируют иконку
+сами, из-за чего колокол уезжал из плашки. Поэтому плашка нарисована на самом `#header_notification_area`
+(46×24, `rgba(103, 112, 123, .2)`), обёртка `[data-featuretarget="green-envelope"]` растянута на неё
+флексом, внутренний `<div>` получил `display: contents`, а сама кнопка — `15×15` с `!important` по
+геометрии. Без этого набора правок иконка встаёт по левому краю плашки.
+
+## Баланс
+
+`#header_wallet_ctn` заполнен текстом `$3.87` и спозиционирован под ником:
+
+```css
+#global_actions #global_action_menu { position: relative; }
+#header_wallet_ctn { position: absolute; right: 0; top: 100%; margin-top: 3px; font-size: 11px; color: #b8b6b4; }
+```
+
+Сумма в выпадающем меню аккаунта тоже переведена с тенге на `$3.87` — раньше там стояло `2 671,18₸`.
 
 ## Проверка
 

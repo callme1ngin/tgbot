@@ -15196,38 +15196,65 @@ div#headerSearch {
 :where(._2IVd64AHN6R428cgcPqW7M){box-sizing:border-box;display:grid;justify-content:flex-start;align-items:stretch;grid-template-columns:minmax(0, 1fr);grid-template-rows:none}._2PUyyAEGuZenuwES7VJvQO{display:var(--grid-display)}._16FZUyKiH6Z7trthKypJwf{grid-template-columns:var(--grid-columns)}._2QdiX1hDsJmlkrHmcCOMbV{grid-template-rows:var(--grid-rows)}.Cr7YIMQn6_lDRU4-3BR8b{grid-auto-columns:var(--grid-auto-columns)}._3kyzvGnYVLT0DW6nzP9n18{grid-auto-rows:var(--grid-auto-rows)}._3AvZKfpfaIQbfczVRBASsX{grid-auto-flow:var(--grid-auto-flow)}._1-yfCTWkj4tOFfb3EKXx6N{grid-template-areas:var(--grid-areas)}._1yUwWGTk4IX0IhdJiKfFBf{grid-auto-flow:var(--grid-flow)}._2Tglp6488nVBhU976Llfpe{align-content:var(--grid-align-content)}.TT1_g1XWXbbLgxOPIpczV{justify-content:var(--grid-justify-content)}._1ve3GjJA-d6MfYcIiXdqz0{align-items:var(--grid-align-items)}._2LsmJGVn3g0GHmBPNWVn5T{justify-items:var(--grid-justify-items)}.c0C2uHpDLCegllhH1rM3M{gap:var(--grid-gap-y, var(--grid-gap, 0)) var(--grid-gap-x, var(--grid-gap, 0))}
 
 </style><style type="text/css">
-    /* Steam's markup carries an inline `background-color: transparent` on the legacy bell, so the 46×24
-       plate that shared_global.css defines for it never paints — the page shows a bare 14 px sprite.
-       The reference header has both: the grey plate, and a small bell on it. So the plate is restored
-       here, its old sprite icon dropped, and the React bell — the shape the live page draws — is centred
-       on top at 15 px. */
+    /* The 2026 header ships two bells: a React inbox button and the legacy sprite. On this page the
+       sprite element keeps its own 24 px line and the React one floats above it, so the icon reads as
+       slipped. The plate is painted on the area itself and the button is centred in it — one bell,
+       dead centre, same tone as the Install Steam button. */
     [data-featuretarget="green-envelope-responsive"] { display: none !important; }
 
-    #header_notification_link.header_notification_bell {
-        background-image: none !important;
-        background-color: rgba(103, 112, 123, 0.2) !important;   /* the Install Steam button tone */
-    }
-
-    #header_notification_area { position: relative; }
-
-    #header_notification_area [data-featuretarget="green-envelope"] {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-    }
-
-    #green_envelope_menu_root {
+    #header_notification_area {
+        position: relative;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 15px;
-        height: 15px;
-        padding: 0;
-        border: 0;
-        background: none;
+        width: 46px;
+        height: 24px;
+        margin: 0 3px 0 17px;
+        background: rgba(103, 112, 123, 0.2);
+        vertical-align: middle;
+    }
+
+    #header_notification_area > *:not([data-featuretarget="green-envelope"]) { display: none !important; }
+
+    #header_notification_area [data-featuretarget="green-envelope"] {
+        position: absolute !important;
+        inset: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        pointer-events: none;
+    }
+
+    /* The React chunk ships its own stylesheet for this button (greenenvelope.css), and it positions the
+       icon itself — hence `display: contents` on the wrapper and !important on the geometry: the bell is
+       a flex item of the area, nothing else. */
+    #header_notification_area [data-featuretarget="green-envelope"] > div { display: contents; }
+
+    /* The balance sits under the account name, as Steam draws it. */
+    #global_actions #global_action_menu { position: relative; }
+
+    #header_wallet_ctn {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 3px;
+        font-size: 11px;
+        line-height: 13px;
+        color: #b8b6b4;
+        white-space: nowrap;
+    }
+
+    #green_envelope_menu_root {
+        position: static !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 15px !important;
+        height: 15px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: none !important;
         color: #d6d6d6;
         cursor: pointer;
         pointer-events: auto;
@@ -15417,7 +15444,7 @@ div#headerSearch {
                                 <a class="submenuitem" href="https://store.steampowered.com/stats/">Stats</a>
                                 <a class="submenuitem" href="https://store.steampowered.com/about/">About</a>
                             </div>
-                            <a class="menuitem supernav supernav_active" href="https://steamcommunity.com/" data-tooltip-type="selector" data-tooltip-content=".submenu_Community">COMMUNITY</a>
+                            <a class="menuitem supernav" href="https://steamcommunity.com/" data-tooltip-type="selector" data-tooltip-content=".submenu_Community">COMMUNITY</a>
                             <div class="submenu_Community" style="display: none;" data-submenuid="Community">
                                 <a class="submenuitem" href="https://steamcommunity.com/">Home</a>
                                 <a class="submenuitem" href="https://steamcommunity.com/discussions/">Discussions</a>
@@ -15425,7 +15452,7 @@ div#headerSearch {
                                 <a class="submenuitem" href="https://steamcommunity.com/market/">Market</a>
                                 <a class="submenuitem" href="https://steamcommunity.com/?subsection=broadcasts">Broadcasts</a>
                             </div>
-                            <a class="menuitem supernav username" href="https://steamcommunity.com/my/" data-tooltip-type="selector" data-tooltip-content=".submenu_Profile">{{PROFILE_NAME}}</a>
+                            <a class="menuitem supernav supernav_active username" href="https://steamcommunity.com/my/" data-tooltip-type="selector" data-tooltip-content=".submenu_Profile">{{PROFILE_NAME}}</a>
                             <div class="submenu_Profile" style="display: none;" data-submenuid="Profile">
                                 <a class="submenuitem" href="https://steamcommunity.com/my/home/">Activity</a>
                                 <a class="submenuitem" href="https://steamcommunity.com/my/">Profile</a>
@@ -15461,7 +15488,7 @@ div#headerSearch {
                                             </button>
                                         </div>
                                     </div>
-                                    <div id="header_notification_link" class="header_notification_btn global_header_toggle_button header_notification_bell" style="background-color: rgba(0, 0, 0, 0);"></div>
+                                    <div id="header_notification_link" class="header_notification_btn global_header_toggle_button header_notification_bell" style="background-color: rgba(0, 0, 0, 0); display: none;"></div>
                                 </div>
                                 <button class="pulldown global_action_link persona_name_text_content" id="account_pulldown" onclick="ShowMenu( this, 'account_dropdown', 'right', 'bottom', true );">
                                 {{PROFILE_NAME}}                  </button>
@@ -15473,13 +15500,13 @@ div#headerSearch {
 </a>
                                         <a class="popup_menu_item" href="https://store.steampowered.com/account/preferences/">Store preferences</a>
                                         <a class="popup_menu_item" href="https://store.steampowered.com/steamaccount/addfunds/">
-                                            View my wallet <span class="account_name">2 671,18₸</span>
+                                            View my wallet <span class="account_name">$3.87</span>
 </a>
                                         <span class="popup_menu_item" id="account_language_pulldown">Change language</span>
                                         <a class="popup_menu_item" href="javascript:Logout();">Sign out of account...</a>
                                     </div>
                                 </div>
-                                <div id="header_wallet_ctn"></div>
+                                <div id="header_wallet_ctn">$3.87</div>
                             </div>
                             <a href="{{PROFILE_URL}}" class="user_avatar playerAvatar offline" aria-label="View your profile">
                                 <img src="{{AVATAR_URL}}" alt="{{PROFILE_NAME}}">
