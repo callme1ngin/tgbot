@@ -26,6 +26,13 @@ const FRIEND_SCREENSHOT_VIEWPORT = {
   height: Number(process.env.FRIEND_SCREENSHOT_HEIGHT || 720)
 };
 
+// The CS2 templates draw into a canvas of a fixed size, so the viewport has to match it exactly:
+// the page scales the canvas to the viewport, and an element screenshot of a scaled canvas is blurry.
+const CS2_VIEWPORTS = {
+  [config.TEMPLATES.CS2_WRONG_CODE]: { width: 1850, height: 1079 },
+  [config.TEMPLATES.CS2_NOT_FOUND]: { width: 1844, height: 1079 }
+};
+
 const browserPool = new BrowserPool({
   maxContexts: Number(process.env.BROWSER_CONTEXTS || 2),
   maxPagesPerContext: Number(process.env.PAGES_PER_CONTEXT || 3),
@@ -1119,6 +1126,138 @@ async function processFriendCodeRequest(pageData, friendCodeInput, templateName 
   return screenshot.imageBuffer;
 }
 
+function isCs2Template(templateName) {
+  return (
+    templateName === config.TEMPLATES.CS2_WRONG_CODE ||
+    templateName === config.TEMPLATES.CS2_NOT_FOUND
+  );
+}
+
+// The CS2 templates hand the avatar to an <img> inside the page. Steam's CDN answers without CORS
+// headers, and a canvas that has drawn such an image cannot be exported — so the bytes are fetched
+// here and passed in as a data URL. The screen then renders the same way with or without the CDN.
+async function fetchImageDataUrl(url) {
+  if (!url || !/^https?:/i.test(url)) {
+    return '';
+  }
+
+  const response = await fetchWithTimeout(url);
+
+  if (!response.ok) {
+    throw new Error(`avatar HTTP ${response.status}`);
+  }
+
+  const contentType = (response.headers.get('content-type') || '').split(';')[0].trim();
+
+  if (contentType && !/^image\//i.test(contentType)) {
+    throw new Error(`avatar content type ${contentType}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  if (buffer.length > 8 * 1024 * 1024) {
+    throw new Error('avatar is larger than 8 MB');
+  }
+
+  return `data:${contentType || 'image/jpeg'};base64,${buffer.toString('base64')}`;
+}
+
+// Only the nickname and the avatar of the fake page: the CS2 screens carry neither a frame nor a
+// friend count, and the friend code is typed by the operator, not parsed.
+async function loadCs2Profile(url) {
+  const { html, finalUrl } = await loadHtml(url);
+  const data = parseFriendTemplateData(html, finalUrl, url);
+
+  return {
+    nickname: data.profileName || 'Steam User',
+    avatarUrl: data.avatarUrl || '',
+    sentUrl: url
+  };
+}
+
+async function renderCs2Screenshot({ templateName, nickname, avatarDataUrl, friendCode }) {
+  const template = await loadTemplate(templateName);
+  const viewport = CS2_VIEWPORTS[templateName] || CS2_VIEWPORTS[config.TEMPLATES.CS2_WRONG_CODE];
+  const canvasSelector = templateName === config.TEMPLATES.CS2_NOT_FOUND ? '#cs2-image' : '#image';
+  const page = await browserPool.getPage();
+
+  try {
+    await page.setViewportSize(viewport);
+
+    await page.setContent(template.html, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000
+    });
+
+    await page.waitForFunction(() => typeof window.renderProfile === 'function', undefined, {
+      timeout: 15000
+    });
+
+    // renderProfile resolves only after the background, the avatar and the fonts are ready.
+    // The two templates name the friend code differently — `friendCode` on the wrong-code screen,
+    // `code` on the not-found one — so both keys are sent and each template picks its own.
+    const rendered = await page.evaluate(async (payload) => {
+      try {
+        return await window.renderProfile(payload);
+      } catch (error) {
+        return `render error: ${error?.message || error}`;
+      }
+    }, {
+      nickname,
+      avatarDataUrl: avatarDataUrl || '',
+      friendCode: friendCode || '',
+      code: friendCode || ''
+    });
+
+    if (rendered !== true) {
+      throw new Error(String(rendered || 'template refused to render'));
+    }
+
+    const canvas = await page.$(canvasSelector);
+
+    if (!canvas) {
+      throw new Error(`canvas ${canvasSelector} is missing in ${templateName}`);
+    }
+
+    return await canvas.screenshot({ type: 'png' });
+  } finally {
+    await browserPool.releasePage(page);
+  }
+}
+
+async function processCs2Request(templateName, url, friendCode = '') {
+  const cacheKey = screenshotCache.generateKey(url, `${templateName}:${friendCode}`, {
+    renderVersion: SCREENSHOT_CACHE_VERSION
+  });
+  const cached = screenshotCache.get(cacheKey);
+
+  if (cached) {
+    console.log(`Cache hit for ${templateName}: ${url}`);
+    return cached;
+  }
+
+  const profile = await loadCs2Profile(url);
+  let avatarDataUrl = '';
+
+  try {
+    avatarDataUrl = await fetchImageDataUrl(profile.avatarUrl);
+  } catch (error) {
+    console.warn(`CS2 avatar fetch failed (${templateName}): ${error.message}`);
+  }
+
+  const imageBuffer = await renderCs2Screenshot({
+    templateName,
+    nickname: profile.nickname,
+    avatarDataUrl,
+    friendCode
+  });
+
+  screenshotCache.set(cacheKey, imageBuffer);
+  console.log(`Screenshot created for ${templateName}: ${url}`);
+
+  return imageBuffer;
+}
+
 function mainKeyboard() {
   return {
     inline_keyboard: [
@@ -1145,6 +1284,43 @@ function mainKeyboard() {
           text: '🇨🇳Ошибка steam china',
           callback_data: 'template_steam_china'
         }
+      ],
+      [
+        {
+          text: '🎮CS2 Code',
+          callback_data: 'cs2_menu'
+        }
+      ]
+    ]
+  };
+}
+
+function cs2Keyboard() {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: '🎯CS2 Fake Code',
+          callback_data: 'cs2_fake_code'
+        }
+      ],
+      [
+        {
+          text: '❓CS2 Code Not found',
+          callback_data: 'cs2_not_found'
+        }
+      ],
+      [
+        {
+          text: '⛔CS2 Ban',
+          callback_data: 'cs2_ban'
+        }
+      ],
+      [
+        {
+          text: 'Сменить шаблон',
+          callback_data: 'show_templates'
+        }
       ]
     ]
   };
@@ -1167,6 +1343,14 @@ function templateLabel(templateName) {
     return '🇨🇳Ошибка steam china';
   }
 
+  if (templateName === config.TEMPLATES.CS2_WRONG_CODE) {
+    return '🎯CS2 Fake Code';
+  }
+
+  if (templateName === config.TEMPLATES.CS2_NOT_FOUND) {
+    return '❓CS2 Code Not found';
+  }
+
   return templateName;
 }
 
@@ -1185,6 +1369,14 @@ function templatePrompt(templateName) {
 
   if (templateName === config.TEMPLATES.STEAM_CHINA) {
     return 'Отправь ссылку на фейк.';
+  }
+
+  if (templateName === config.TEMPLATES.CS2_WRONG_CODE) {
+    return 'Отправь ссылку на фэйк.';
+  }
+
+  if (templateName === config.TEMPLATES.CS2_NOT_FOUND) {
+    return 'Отправь ссылку на фэйк.';
   }
 
   return 'Отправь ссылку для обработки.';
@@ -1489,6 +1681,7 @@ async function showTemplateMenu(ctx, options = {}) {
   state.status = 'choosing_template';
   state.lastFriendPageData = null;
   state.lastSteamChinaData = null;
+  state.cs2Profile = null;
   state.addErrorMode = null;
   userState.set(ctx.from.id, state);
 
@@ -1597,6 +1790,42 @@ bot.action('template_steam_china', (ctx) => selectTemplate(ctx, config.TEMPLATES
 bot.action('add_error_profile', (ctx) => selectAddErrorMode(ctx, 'profile'));
 bot.action('add_error_friendlink', (ctx) => selectAddErrorMode(ctx, 'friendlink'));
 
+async function startCs2Flow(ctx, templateName) {
+  const state = getUserState(ctx);
+  await ctx.answerCbQuery();
+
+  state.template = templateName;
+  state.status = 'waiting_cs2_link';
+  state.cs2Profile = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatTemplateHint(templateName, 'Отправь ссылку на фэйк.'),
+    cs2Keyboard()
+  );
+}
+
+bot.action('cs2_menu', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.template = null;
+  state.status = 'choosing_cs2_template';
+  state.cs2Profile = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(ctx, formatHint('🎮CS2 Code', 'Выбери экран.'), cs2Keyboard());
+});
+
+bot.action('cs2_fake_code', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_WRONG_CODE));
+bot.action('cs2_not_found', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_NOT_FOUND));
+
+bot.action('cs2_ban', async (ctx) => {
+  await ctx.answerCbQuery();
+  await editMenu(ctx, formatHint('⛔CS2 Ban', 'Экран ещё в работе.'), cs2Keyboard());
+});
+
 bot.action('add_friend_code', async (ctx) => {
   const state = getUserState(ctx);
   await ctx.answerCbQuery();
@@ -1628,6 +1857,138 @@ bot.on('text', async (ctx) => {
   if (url.startsWith('/')) {
     await deleteIncomingMessage(ctx);
     return showTemplateMenu(ctx, { fresh: true });
+  }
+
+  if (state.status === 'waiting_cs2_link') {
+    if (!isCs2Template(state.template)) {
+      state.status = 'choosing_cs2_template';
+      userState.set(ctx.from.id, state);
+      await editMenu(ctx, formatHint('🎮CS2 Code', 'Выбери экран.'), cs2Keyboard());
+      return;
+    }
+
+    try {
+      await assertPublicHttpUrl(url);
+    } catch {
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Отправь действующий http/https адрес.'),
+        cs2Keyboard()
+      );
+      return;
+    }
+
+    let progressMessage;
+
+    try {
+      state.status = 'processing_cs2_link';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(
+        ctx,
+        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nСобираю изображение...`
+      );
+
+      const taskId = `${ctx.from.id}_cs2_link_${Date.now()}`;
+
+      // This screen carries the friend code, so the link is only the first half: keep the profile and
+      // ask for the code instead of rendering right away.
+      if (state.template === config.TEMPLATES.CS2_NOT_FOUND) {
+        const profile = await requestQueue.add(taskId, () => loadCs2Profile(url));
+
+        await deleteProgressMessage(ctx, progressMessage);
+
+        state.status = 'waiting_cs2_code';
+        state.cs2Profile = profile;
+        userState.set(ctx.from.id, state);
+
+        await editMenu(ctx, formatStateHint(state, 'Отправь френд-код кита.'), cs2Keyboard());
+        return;
+      }
+
+      const imageBuffer = await requestQueue.add(taskId, () =>
+        processCs2Request(config.TEMPLATES.CS2_WRONG_CODE, url)
+      );
+
+      await ctx.replyWithPhoto({ source: imageBuffer });
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_cs2_link';
+      state.cs2Profile = null;
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(ctx, formatStateHint(state, 'Готово.'), cs2Keyboard());
+    } catch (error) {
+      console.error('CS2 link request error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_cs2_link';
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Не удалось обработать ссылку. Отправь ссылку ещё раз.'),
+        cs2Keyboard()
+      );
+    }
+
+    return;
+  }
+
+  if (state.status === 'waiting_cs2_code') {
+    const friendCode = url.replace(/\s+/g, '').toUpperCase();
+
+    if (!/^[A-Z0-9-]{3,32}$/.test(friendCode)) {
+      await editMenu(ctx, formatStateHint(state, 'Отправь код вида ABCDE-FGHI.'), cs2Keyboard());
+      return;
+    }
+
+    if (!state.cs2Profile) {
+      state.status = 'waiting_cs2_link';
+      userState.set(ctx.from.id, state);
+      await editMenu(ctx, formatStateHint(state, 'Сначала отправь ссылку на фэйк.'), cs2Keyboard());
+      return;
+    }
+
+    let progressMessage;
+
+    try {
+      state.status = 'processing_cs2_code';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(
+        ctx,
+        `Шаблон: ${templateProgressName(state.template, state.addErrorMode)}\nДобавляю код ${friendCode}...`
+      );
+
+      const taskId = `${ctx.from.id}_cs2_code_${Date.now()}`;
+      const imageBuffer = await requestQueue.add(taskId, () =>
+        processCs2Request(config.TEMPLATES.CS2_NOT_FOUND, state.cs2Profile.sentUrl, friendCode)
+      );
+
+      await ctx.replyWithPhoto({ source: imageBuffer });
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_cs2_link';
+      state.cs2Profile = null;
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(ctx, formatStateHint(state, 'Готово.'), cs2Keyboard());
+    } catch (error) {
+      console.error('CS2 code request error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_cs2_code';
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Не удалось собрать изображение. Отправь код ещё раз.'),
+        cs2Keyboard()
+      );
+    }
+
+    return;
   }
 
   if (state.status === 'waiting_steam_china_code') {
