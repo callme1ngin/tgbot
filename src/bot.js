@@ -2403,8 +2403,9 @@ bot.action('again', async (ctx) => {
   // The delegated starter answers the callback itself; answering here as well would be a second answer
   // to the same query, which Telegram rejects.
   if (!template) {
+    await ctx.answerCbQuery();
+
     if (state.staticScreen === 'dota_fake_code') {
-      await ctx.answerCbQuery();
       await sendDotaFakeCode(ctx);
       return;
     }
@@ -2429,6 +2430,8 @@ bot.action('again', async (ctx) => {
   }
 
   if (template === config.TEMPLATES.QR_FRIEND) {
+    await ctx.answerCbQuery();
+
     state.status = 'waiting_qr_link';
     userState.set(ctx.from.id, state);
     await editMenu(
@@ -2440,6 +2443,8 @@ bot.action('again', async (ctx) => {
   }
 
   if (template === config.TEMPLATES.ADD_ERROR && state.addErrorMode) {
+    await ctx.answerCbQuery();
+
     state.status = 'waiting_link';
     userState.set(ctx.from.id, state);
     await editMenu(
@@ -3661,7 +3666,9 @@ async function main() {
   healthServer = startHealthServer();
   await bot.telegram.setMyCommands([
     { command: 'start', description: 'Открыть меню' },
-    { command: 'tracker', description: 'Трекер профилей' }
+    { command: 'menu', description: 'Вернуться в меню' },
+    { command: 'tracker', description: 'Трекер профилей' },
+    { command: 'emoji', description: 'ID пересланного премиум-эмодзи' }
   ]).catch(error => {
     console.warn('Failed to set bot commands:', error.description || error.message);
   });
