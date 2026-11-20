@@ -1,23 +1,29 @@
 #!/usr/bin/env bash
 # One-time: turn the existing bot directory on the server into a git checkout, without losing it.
 #
-#   cd /root/tgbot && bash deploy/adopt.sh
+#   git clone -b dev https://github.com/callme1ngin/tgbot.git /root/tgbot-src
+#   bash /root/tgbot-src/deploy/adopt.sh /root/tgbot
 #
-# What it does: backs the directory up, points an origin at the repo, force-checks out the branch over
-# the old files, then runs the normal update. .env, logs/ and .cache/ are untracked, so they survive.
+# The first argument is the directory that already runs the bot; without it the current directory is
+# used. What happens: a tarball of that directory is written next to it, then git init + origin +
+# forced checkout of the branch over the old files, then the normal update. .env, logs/ and .cache/
+# are untracked, so the checkout leaves them alone.
 set -euo pipefail
 
+TARGET="${1:-$PWD}"
 BRANCH="${BRANCH:-dev}"
 REMOTE_URL="${REMOTE_URL:-https://github.com/callme1ngin/tgbot.git}"
 REMOTE="${REMOTE:-origin}"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-
 say() { printf '\n== %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
-[ -f package.json ] || die "no package.json in $ROOT — run this from the bot directory"
+[ -d "$TARGET" ] || die "no such directory: $TARGET"
+ROOT="$(cd "$TARGET" && pwd)"
+cd "$ROOT"
+
+[ -f package.json ] || die "no package.json in $ROOT — point this at the bot directory"
+[ -f src/bot.js ] || die "no src/bot.js in $ROOT — point this at the bot directory"
 
 if [ -d .git ]; then
     say "already a checkout"
@@ -25,19 +31,19 @@ if [ -d .git ]; then
     die "nothing to adopt — use deploy/update.sh"
 fi
 
+PARENT="$(dirname "$ROOT")"
 STAMP="$(date +%F-%H%M)"
-BACKUP="../tgbot-backup-${STAMP}.tar.gz"
+BACKUP="$PARENT/tgbot-backup-${STAMP}.tar.gz"
 
 say "backup $BACKUP"
-tar czf "$BACKUP" \
-    --exclude=./node_modules --exclude=./.cache --exclude=./logs \
-    . 2>/dev/null || true
+tar czf "$BACKUP" -C "$ROOT" \
+    --exclude=./node_modules --exclude=./.cache --exclude=./logs . 2>/dev/null || true
 ls -lh "$BACKUP"
 
-say "git init"
+say "git init in $ROOT"
 git init -q
 git config core.fileMode false
-git remote add "$REMOTE" "$REMOTE_URL"
+git remote add "$REMOTE" "$REMOTE_URL" 2>/dev/null || git remote set-url "$REMOTE" "$REMOTE_URL"
 git fetch --prune "$REMOTE"
 
 say "checkout $BRANCH"
