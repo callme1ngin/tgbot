@@ -2,7 +2,8 @@ node_modules/
 .env
 .cache/
 logs/
-data/
+data/*
+!data/ui.json
 npm-debug.log
 
 samples/reference/

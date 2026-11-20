@@ -8,6 +8,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const config = require('./config');
 const tracker = require('./tracker');
+const ui = require('./ui');
 const BrowserPool = require('./browser-pool');
 const RequestQueue = require('./request-queue');
 const ScreenshotCache = require('./screenshot-cache');
@@ -2200,7 +2201,7 @@ async function editMenu(ctx, text, replyMarkup) {
   const messageId = state.menuMessageId;
   const options = {
     parse_mode: 'HTML',
-    reply_markup: replyMarkup || { inline_keyboard: [] }
+    reply_markup: ui.decorateInline(replyMarkup || { inline_keyboard: [] })
   };
 
   if (messageId && chatId) {
@@ -2249,7 +2250,7 @@ async function replaceMenu(ctx, text, replyMarkup) {
   await deleteSavedMenu(ctx);
   const message = await ctx.reply(text, {
     parse_mode: 'HTML',
-    reply_markup: replyMarkup
+    reply_markup: ui.decorateInline(replyMarkup)
   });
   await saveMenuMessage(ctx, message);
 }
@@ -2262,7 +2263,7 @@ async function replaceMenuWithPhoto(ctx, photoPath, caption, replyMarkup) {
   const message = await replyWithCachedPhoto(ctx, photoPath, {
     caption,
     parse_mode: 'HTML',
-    reply_markup: replyMarkup
+    reply_markup: ui.decorateInline(replyMarkup)
   });
 
   if (asset) {
@@ -2392,6 +2393,26 @@ bot.command('menu', (ctx) => showTemplateMenu(ctx, { fresh: true, deleteCommand:
 bot.command('tracker', (ctx) => {
   deleteIncomingMessage(ctx).catch(() => {});
   return showTracker(ctx);
+});
+
+// Пересланный премиум-эмодзи → его custom_emoji_id, чтобы заполнять data/ui.json без сторонних ботов.
+bot.command('emoji', async (ctx) => {
+  await deleteIncomingMessage(ctx);
+
+  const ids = (ctx.message?.entities || [])
+    .filter((entity) => entity.type === 'custom_emoji')
+    .map((entity) => String(entity.custom_emoji_id || ''))
+    .filter(Boolean);
+
+  if (ids.length === 0) {
+    await ctx.reply('Перешли премиум-эмодзи — отвечу его custom_emoji_id.');
+    return;
+  }
+
+  await ctx.reply(
+    'custom_emoji_id:\n' + ids.map((id) => `<code>${id}</code>`).join('\n'),
+    { parse_mode: 'HTML' }
+  );
 });
 
 bot.action('show_templates', async (ctx) => {
