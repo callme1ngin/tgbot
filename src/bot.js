@@ -61,6 +61,8 @@ const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');
 const SILENTLOGO_PATH = path.join(PROJECT_ROOT, 'assets', 'silentlogo.png');
+// The Dota fake-code screen is a finished picture, not a template: it is sent as is.
+const DOTA_FAKE_CODE_PATH = path.join(PROJECT_ROOT, 'assets', 'dota_fake_code.png');
 const RUNTIME_CACHE_DIR = path.join(PROJECT_ROOT, '.cache');
 const TRANSPARENT_PIXEL =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
@@ -1419,6 +1421,12 @@ function dotaKeyboard() {
     inline_keyboard: [
       [
         {
+          text: '🎯Fake Code',
+          callback_data: 'dota_fake_code'
+        }
+      ],
+      [
+        {
           text: '❓Not Found',
           callback_data: 'dota_not_found'
         }
@@ -2061,6 +2069,35 @@ bot.action('dota_menu', async (ctx) => {
 
 bot.action('dota_not_found', (ctx) => startDotaFlow(ctx, config.TEMPLATES.DOTA_NOT_FOUND));
 bot.action('dota_not_friends', (ctx) => startDotaFlow(ctx, config.TEMPLATES.DOTA_NOT_FRIENDS));
+
+// Nothing to render: the screen is a finished picture. Sent as a buffer, so the bot does not depend on
+// a file_id it has never seen.
+bot.action('dota_fake_code', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+
+  let buffer;
+
+  try {
+    buffer = await fs.readFile(DOTA_FAKE_CODE_PATH);
+  } catch {
+    await editMenu(
+      ctx,
+      formatHint('🎯Dota2 Fake Code', 'Файл assets/dota_fake_code.png не найден на сервере.'),
+      dotaKeyboard()
+    );
+    return;
+  }
+
+  await ctx.replyWithPhoto({ source: buffer });
+
+  state.status = 'choosing_dota_template';
+  state.template = null;
+  userState.set(ctx.from.id, state);
+
+  await replaceMenu(ctx, formatHint('⚔️Dota2 Code', 'Готово. Выбери экран.'), dotaKeyboard());
+});
 
 // Renders one ban screen and leaves the durations on screen, so the operator can try another value
 // without walking the whole flow again.
