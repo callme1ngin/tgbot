@@ -1183,9 +1183,14 @@ async function renderCs2Screenshot({ templateName, payload }) {
       timeout: 15000
     });
 
-    await page.waitForFunction(() => typeof window.renderProfile === 'function', undefined, {
-      timeout: 15000
-    });
+    await page.waitForFunction(
+      () =>
+        typeof window.renderProfile === 'function' ||
+        typeof window.renderCS2 === 'function' ||
+        typeof window.setCS2 === 'function',
+      undefined,
+      { timeout: 15000 }
+    );
 
     // The canvas carries the real size, so the viewport is set from it instead of a table of guesses.
     // After the resize the page lays the canvas out at 1:1 and the element screenshot stays sharp.
@@ -1202,9 +1207,13 @@ async function renderCs2Screenshot({ templateName, payload }) {
     await page.setViewportSize(size);
 
     // renderProfile resolves only after the background, the avatar and the fonts are ready.
+    // The templates name that entry point differently — renderProfile, renderCS2, setCS2 — so whichever
+    // one is there is called with the same payload.
     const rendered = await page.evaluate(async (data) => {
+      const render = window.renderProfile || window.renderCS2 || window.setCS2;
+
       try {
-        return await window.renderProfile(data);
+        return await render(data);
       } catch (error) {
         return `render error: ${error?.message || error}`;
       }
@@ -1249,7 +1258,8 @@ async function processCs2Request(templateName, url, options = {}) {
   }
 
   // One payload for every CS2 screen: each template reads the keys it knows and ignores the rest.
-  // `friendCode`/`code` are the two names the code screens use, `banText`/`text` the ban one.
+  // `friendCode`/`code` are the two names the code screens use; the ban screen reads `cooldown`,
+  // falls back to `time`, then `text` — all three carry the same label.
   const imageBuffer = await renderCs2Screenshot({
     templateName,
     payload: {
@@ -1258,7 +1268,9 @@ async function processCs2Request(templateName, url, options = {}) {
       friendCode,
       code: friendCode,
       banText,
-      text: banText
+      text: banText,
+      time: banText,
+      cooldown: banText
     }
   });
 
