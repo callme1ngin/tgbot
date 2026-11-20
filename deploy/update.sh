@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 # Server-side update for a machine that already runs this bot from a git checkout.
 #
-#   bash deploy/update.sh              # pull dev, install, rebuild templates, restart
+#   bash deploy/update.sh              # pull dev and restart the bot
 #   BRANCH=main bash deploy/update.sh  # same, from another branch
 #
-# The script never touches .env, logs/ or .cache/ — they are not tracked and stay where they are.
-# It refuses to run on a dirty tree: a server is not a place to resolve conflicts, and a half-merged
-# bot is worse than an old one.
+# The runtime decides what "install" means here:
+#   docker   — the image builds itself (Dockerfile runs npm ci), the host needs no Node at all;
+#   pm2      — Node lives on the host, so npm ci + templates + playwright run here;
+#   systemd  — same as pm2, unit tg-html-bot.service.
+#
+# .env, logs/ and .cache/ are untracked and stay where they are. The script refuses to run on a dirty
+# tree: a server is not a place to resolve conflicts, and a half-merged bot is worse than an old one.
 set -euo pipefail
 
 BRANCH="${BRANCH:-dev}"
 REMOTE="${REMOTE:-origin}"
 PORT="${PORT:-3000}"
 WITH_DEPS="${WITH_DEPS:-0}"
-HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-40}"
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -35,7 +39,52 @@ say "checkout $BRANCH"
 git checkout -f -B "$BRANCH" "$REMOTE/$BRANCH"
 git --no-pager log --oneline -1
 
+# One helper for both compose generations, so the checks below stay readable.
+compose() {
+    if docker compose version >/dev/null 2>&1; then
+        docker compose "$@"
+    else
+        docker-compose "$@"
+    fi
+}
+
+RUNNER="node"
+
+if [ -f docker-compose.yml ] && command -v docker >/dev/null 2>&1 \
+    && compose ps -q 2>/dev/null | grep -q .; then
+    RUNNER="docker"
+elif command -v pm2 >/dev/null 2>&1 && pm2 describe tg-html-bot >/dev/null 2>&1; then
+    RUNNER="pm2"
+elif command -v systemctl >/dev/null 2>&1 \
+    && systemctl list-unit-files 'tg-html-bot.service' 2>/dev/null | grep -q '^tg-html-bot\.service'; then
+    RUNNER="systemd"
+fi
+
+say "runtime: $RUNNER"
+
+if [ "$RUNNER" = "docker" ]; then
+    # The image carries Node, Playwright and the browsers; nothing is installed on the host.
+    say "build and restart"
+    compose up -d --build
+
+    say "health"
+    cid="$(compose ps -q | head -n 1)"
+    [ -n "$cid" ] || die "compose did not report a container"
+
+    deadline=$(( $(date +%s) + HEALTH_TIMEOUT ))
+    while :; do
+        state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || echo unknown)"
+        case "$state" in
+            healthy) echo "healthy"; exit 0 ;;
+            unhealthy) docker logs --tail 40 "$cid" >&2 || true; die "container is unhealthy" ;;
+        esac
+        [ "$(date +%s)" -lt "$deadline" ] || { docker logs --tail 40 "$cid" >&2 || true; die "container not healthy after ${HEALTH_TIMEOUT}s (state: $state)"; }
+        sleep 3
+    done
+fi
+
 say "dependencies"
+command -v npm >/dev/null 2>&1 || die "npm is missing on the host — if the bot runs in docker, start the compose project first so this script can detect it"
 npm ci --omit=dev
 
 say "templates"
@@ -49,18 +98,11 @@ else
 fi
 
 say "restart"
-if [ -f docker-compose.yml ] && command -v docker >/dev/null 2>&1 \
-    && docker compose ps -q 2>/dev/null | grep -q .; then
-    docker compose up -d --build
-    echo "restarted: docker compose"
-elif command -v docker-compose >/dev/null 2>&1 && docker-compose ps -q 2>/dev/null | grep -q .; then
-    docker-compose up -d --build
-    echo "restarted: docker-compose"
-elif command -v pm2 >/dev/null 2>&1 && pm2 describe tg-html-bot >/dev/null 2>&1; then
+if [ "$RUNNER" = "pm2" ]; then
     pm2 restart tg-html-bot --update-env
     pm2 save >/dev/null
     echo "restarted: pm2 tg-html-bot"
-elif command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files 'tg-html-bot.service' 2>/dev/null | grep -q '^tg-html-bot\.service'; then
+elif [ "$RUNNER" = "systemd" ]; then
     systemctl restart tg-html-bot
     echo "restarted: systemd tg-html-bot.service"
 else
