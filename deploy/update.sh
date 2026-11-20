@@ -51,7 +51,7 @@ compose() {
 RUNNER="node"
 
 if [ -f docker-compose.yml ] && command -v docker >/dev/null 2>&1 \
-    && compose ps -q 2>/dev/null | grep -q .; then
+    && compose ps -aq 2>/dev/null | grep -q .; then
     RUNNER="docker"
 elif command -v pm2 >/dev/null 2>&1 && pm2 describe tg-html-bot >/dev/null 2>&1; then
     RUNNER="pm2"
@@ -69,6 +69,7 @@ if [ "$RUNNER" = "docker" ]; then
 
     say "health"
     cid="$(compose ps -q | head -n 1)"
+    [ -n "$cid" ] || cid="$(compose ps -aq | head -n 1)"
     [ -n "$cid" ] || die "compose did not report a container"
 
     deadline=$(( $(date +%s) + HEALTH_TIMEOUT ))
