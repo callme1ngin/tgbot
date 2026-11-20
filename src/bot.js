@@ -3133,6 +3133,11 @@ async function shutdown(signal) {
 async function main() {
   await browserPool.init();
   await tracker.load();
+
+  // The poller is started before the Telegram launch on purpose: launch() resolves when long polling is
+  // up, and a slow or retrying launch must not hold the tracker back.
+  tracker.start(handleTrackerChanges);
+
   await Promise.all(Object.values(photoAssets).map(asset => warmupPhotoAsset(asset))).catch(error => {
     console.warn('Failed to warm up menu photos:', error.message);
   });
@@ -3144,7 +3149,6 @@ async function main() {
     console.warn('Failed to set bot commands:', error.description || error.message);
   });
   await bot.launch({ dropPendingUpdates: true });
-  tracker.start(handleTrackerChanges);
   console.log('Bot started');
 }
 

@@ -9,7 +9,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const API_BASE = 'https://api.steampowered.com';
-const POLL_MS = Number(process.env.TRACKER_POLL_MS || 60000);
+const POLL_MS = Number(process.env.TRACKER_POLL_MS || 10000);
 const MAX_PER_USER = Number(process.env.TRACKER_MAX_PER_USER || 10);
 const MAX_TOTAL = Number(process.env.TRACKER_MAX_TOTAL || 500);
 const DATA_DIR = process.env.TRACKER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -26,6 +26,7 @@ let polling = false;
 let lastPollAt = 0;
 let lastError = '';
 let lastChanges = 0;
+let firstPollDone = false;
 
 function apiKey() {
   return String(process.env.STEAM_WEB_API_KEY || '').trim();
@@ -327,6 +328,8 @@ async function pollOnce() {
 }
 
 function start(onChanges) {
+  console.log(`tracker: start requested (key set: ${apiKey() ? 'yes' : 'no'}, profiles: ${Object.keys(db.state).length})`);
+
   if (!apiKey()) {
     lastError = 'STEAM_WEB_API_KEY is not set';
     console.warn(`tracker: ${lastError}, presence is not tracked`);
@@ -352,6 +355,11 @@ function start(onChanges) {
       lastError = '';
       lastChanges = changes.length;
 
+      if (!firstPollDone) {
+        firstPollDone = true;
+        console.log(`tracker: first poll ok, ${Object.keys(db.state).length} profile(s) checked`);
+      }
+
       if (changes.length > 0) {
         console.log(
           `tracker: ${changes.length} change(s) — ` +
@@ -374,7 +382,7 @@ function start(onChanges) {
 
   timer = setInterval(tick, POLL_MS);
   console.log(
-    `tracker: polling every ${Math.round(POLL_MS / 1000)}s, ` +
+    `tracker: polling every ${POLL_MS}ms, ` +
       `${Object.keys(db.state).length} profile(s), ${Object.keys(db.users).length} follower(s)`
   );
   tick();
