@@ -7,7 +7,7 @@
     "template_error": { "icon": "", "style": "primary" },
     "template_steam_china": { "icon": "", "style": "primary" },
 
-    "cs2_menu": { "icon": "", "style": "primary" },
+    "cs2_menu": { "icon": "5206607081334906820", "style": "primary" },
     "dota_menu": { "icon": "", "style": "primary" },
     "cs2_fake_code": { "icon": "", "style": "primary" },
     "cs2_not_found": { "icon": "", "style": "primary" },
