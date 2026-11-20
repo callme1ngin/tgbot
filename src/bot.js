@@ -7,6 +7,7 @@ const net = require('net');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const config = require('./config');
+const tracker = require('./tracker');
 const BrowserPool = require('./browser-pool');
 const RequestQueue = require('./request-queue');
 const ScreenshotCache = require('./screenshot-cache');
@@ -1411,6 +1412,98 @@ function mainKeyboard() {
           text: '⚔️Dota2 Code',
           callback_data: 'dota_menu'
         }
+      ],
+      [
+        {
+          text: '👁 Трекер',
+          callback_data: 'tracker_menu'
+        }
+      ]
+    ]
+  };
+}
+
+function trackerStatusLabel(profile) {
+  if (profile.status === tracker.STATE_OFFLINE) {
+    return '⚫ оффлайн';
+  }
+
+  if (profile.status === tracker.STATE_INGAME) {
+    return `🎮 ${profile.game}`;
+  }
+
+  return '🟢 онлайн';
+}
+
+function trackerKeyboard(notifyOn) {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: '➕ Добавить профиль',
+          callback_data: 'tracker_add'
+        }
+      ],
+      [
+        {
+          text: '📋 Мои профили',
+          callback_data: 'tracker_list'
+        }
+      ],
+      [
+        {
+          text: `🔔 Уведомления: ${notifyOn ? 'вкл' : 'выкл'}`,
+          callback_data: 'tracker_notify'
+        }
+      ],
+      [
+        {
+          text: 'Сменить шаблон',
+          callback_data: 'show_templates'
+        }
+      ]
+    ]
+  };
+}
+
+function trackerListKeyboard(profiles) {
+  const rows = profiles.map((profile) => [
+    {
+      text: `${trackerStatusLabel(profile).slice(0, 24)} · ${String(profile.name).slice(0, 20)}`,
+      callback_data: `tracker_open_${profile.steamId}`
+    }
+  ]);
+
+  rows.push([
+    {
+      text: '← Назад',
+      callback_data: 'tracker_menu'
+    }
+  ]);
+
+  return { inline_keyboard: rows };
+}
+
+function trackerProfileKeyboard(steamId) {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: '🔄 Обновить',
+          callback_data: `tracker_refresh_${steamId}`
+        }
+      ],
+      [
+        {
+          text: '🗑 Отписаться',
+          callback_data: `tracker_remove_${steamId}`
+        }
+      ],
+      [
+        {
+          text: '← Назад',
+          callback_data: 'tracker_list'
+        }
       ]
     ]
   };
@@ -1996,6 +2089,10 @@ function startHealthServer() {
 
 bot.start((ctx) => showTemplateMenu(ctx, { fresh: true, deleteCommand: true }));
 bot.command('menu', (ctx) => showTemplateMenu(ctx, { fresh: true, deleteCommand: true }));
+bot.command('tracker', (ctx) => {
+  deleteIncomingMessage(ctx).catch(() => {});
+  return showTracker(ctx);
+});
 
 bot.action('show_templates', async (ctx) => {
   await ctx.answerCbQuery();
@@ -2098,6 +2195,252 @@ bot.action('dota_fake_code', async (ctx) => {
 
   await replaceMenu(ctx, formatHint('⚔️Dota2 Code', 'Готово. Выбери экран.'), dotaKeyboard());
 });
+
+/* ---------- tracker ---------- */
+
+function trackerMenuText(ctx) {
+  const profiles = tracker.listProfiles(ctx.from.id);
+  const notifyOn = tracker.notifyEnabled(ctx.from.id);
+
+  return formatHint(
+    '👁 Трекер',
+    [
+      `Профилей: ${profiles.length} из ${tracker.MAX_PER_USER}.`,
+      `Уведомления: ${notifyOn ? 'включены' : 'выключены'}.`,
+      'Слежу за оффлайн, онлайном и игрой.'
+    ].join('\n')
+  );
+}
+
+function trackerCardText(profile, steamId) {
+  return formatHint(
+    '👁 Трекер',
+    [
+      profile.name || steamId,
+      trackerStatusLabel(profile),
+      `SteamID: ${steamId}`
+    ].join('\n')
+  );
+}
+
+function trackerConfirmKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: '✅ Следить',
+          callback_data: 'tracker_confirm'
+        }
+      ],
+      [
+        {
+          text: '❌ Отмена',
+          callback_data: 'tracker_list'
+        }
+      ]
+    ]
+  };
+}
+
+async function showTracker(ctx) {
+  const state = getUserState(ctx);
+  state.template = null;
+  state.status = 'tracker_menu';
+  state.trackerCandidate = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(ctx, trackerMenuText(ctx), trackerKeyboard(tracker.notifyEnabled(ctx.from.id)));
+}
+
+bot.action('tracker_menu', async (ctx) => {
+  await ctx.answerCbQuery();
+  await showTracker(ctx);
+});
+
+bot.action('tracker_notify', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const next = await tracker.setNotify(ctx.from.id, !tracker.notifyEnabled(ctx.from.id));
+
+  await editMenu(ctx, trackerMenuText(ctx), trackerKeyboard(next));
+});
+
+bot.action('tracker_add', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.status = 'tracker_waiting_link';
+  state.trackerCandidate = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHint('👁 Трекер', 'Отправь ссылку на профиль Steam или SteamID64.'),
+    trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
+  );
+});
+
+bot.action('tracker_list', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.status = 'tracker_menu';
+  state.trackerCandidate = null;
+  userState.set(ctx.from.id, state);
+
+  const profiles = tracker.listProfiles(ctx.from.id);
+
+  if (profiles.length === 0) {
+    await editMenu(
+      ctx,
+      formatHint('👁 Трекер', 'Пока пусто. Добавь профиль, чтобы следить за ним.'),
+      trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
+    );
+    return;
+  }
+
+  await editMenu(
+    ctx,
+    formatHint('👁 Трекер', `Профилей: ${profiles.length}. Выбери, чтобы открыть.`),
+    trackerListKeyboard(profiles)
+  );
+});
+
+bot.action(/^tracker_open_(7656119[0-9]{10})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const steamId = ctx.match[1];
+  const profile = tracker.listProfiles(ctx.from.id).find((item) => item.steamId === steamId);
+
+  if (!profile) {
+    await showTracker(ctx);
+    return;
+  }
+
+  await editMenu(ctx, trackerCardText(profile, steamId), trackerProfileKeyboard(steamId));
+});
+
+bot.action(/^tracker_refresh_(7656119[0-9]{10})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const steamId = ctx.match[1];
+  const fresh = await tracker.freshStatus(steamId).catch(() => null);
+  const stored = tracker.listProfiles(ctx.from.id).find((item) => item.steamId === steamId);
+
+  if (!stored) {
+    await showTracker(ctx);
+    return;
+  }
+
+  const profile = fresh ? { ...stored, ...fresh } : stored;
+
+  await editMenu(
+    ctx,
+    trackerCardText(profile, steamId) + (fresh ? '' : '\n\nSteam не ответил, показан последний известный статус.'),
+    trackerProfileKeyboard(steamId)
+  );
+});
+
+bot.action(/^tracker_remove_(7656119[0-9]{10})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  await tracker.removeProfile(ctx.from.id, ctx.match[1]);
+
+  const state = getUserState(ctx);
+  state.status = 'tracker_menu';
+  state.trackerCandidate = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(ctx, formatHint('👁 Трекер', 'Профиль удалён из списка.'), trackerKeyboard(tracker.notifyEnabled(ctx.from.id)));
+});
+
+bot.action('tracker_confirm', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  const steamId = state.trackerCandidate;
+
+  if (!steamId) {
+    await showTracker(ctx);
+    return;
+  }
+
+  const status = await tracker.freshStatus(steamId).catch(() => null);
+
+  if (!status) {
+    await editMenu(
+      ctx,
+      formatHint('👁 Трекер', 'Steam не ответил. Попробуй добавить ещё раз.'),
+      trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
+    );
+    return;
+  }
+
+  const result = await tracker.addProfile(ctx.from.id, steamId, status);
+
+  if (!result.ok) {
+    const reason =
+      result.reason === 'limit_user'
+        ? `Уже ${tracker.MAX_PER_USER} профилей — больше не добавлю.`
+        : result.reason === 'limit_total'
+          ? 'Общий лимит бота исчерпан.'
+          : 'Этот профиль уже в списке.';
+
+    await editMenu(
+      ctx,
+      formatHint('👁 Трекер', reason),
+      trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
+    );
+    return;
+  }
+
+  state.status = 'tracker_menu';
+  state.trackerCandidate = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHint('👁 Трекер', `Слежу за ${status.name || steamId}. Уведомления придут в этот чат.`),
+    trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
+  );
+});
+
+// One message per real change, to everyone who follows that profile and has notifications on.
+function trackerChangeText(change) {
+  const name = escapeHtml(change.to.name || change.steamId);
+  const game = escapeHtml(change.to.game || '');
+
+  if (change.to.status === tracker.STATE_INGAME) {
+    if (change.from.status === tracker.STATE_INGAME && change.from.game !== change.to.game) {
+      return `🎮 <b>${name}</b> теперь играет в <b>${game}</b>`;
+    }
+
+    return `🎮 <b>${name}</b> начал играть в <b>${game}</b>`;
+  }
+
+  if (change.to.status === tracker.STATE_ONLINE) {
+    return `🟢 <b>${name}</b> в сети`;
+  }
+
+  return `⚫ <b>${name}</b> вышел из сети`;
+}
+
+async function handleTrackerChanges(changes) {
+  for (const change of changes) {
+    const text = trackerChangeText(change);
+
+    for (const subscriber of tracker.subscribersOf(change.steamId)) {
+      if (!subscriber.notify) {
+        continue;
+      }
+
+      await bot.telegram.sendMessage(subscriber.userId, text, { parse_mode: 'HTML' }).catch((error) => {
+        console.warn(`tracker: message to ${subscriber.userId} failed (${error.description || error.message})`);
+      });
+    }
+  }
+}
+
 
 // Renders one ban screen and leaves the durations on screen, so the operator can try another value
 // without walking the whole flow again.
@@ -2363,6 +2706,61 @@ bot.on('text', async (ctx) => {
       );
     }
 
+    return;
+  }
+
+  if (state.status === 'tracker_waiting_link') {
+    await deleteIncomingMessage(ctx);
+
+    let steamId = '';
+
+    try {
+      steamId = await tracker.resolveProfileInput(url);
+    } catch (error) {
+      console.warn(`tracker: resolve failed (${error.message})`);
+    }
+
+    if (!steamId) {
+      await editMenu(
+        ctx,
+        formatHint(
+          '👁 Трекер',
+          'Не нашёл такой профиль. Отправь ссылку steamcommunity.com/profiles/… или SteamID64.'
+        ),
+        trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
+      );
+      return;
+    }
+
+    if (tracker.listProfiles(ctx.from.id).some((profile) => profile.steamId === steamId)) {
+      await editMenu(
+        ctx,
+        formatHint('👁 Трекер', 'Этот профиль уже в списке.'),
+        trackerProfileKeyboard(steamId)
+      );
+      return;
+    }
+
+    const status = await tracker.freshStatus(steamId).catch(() => null);
+
+    if (!status) {
+      await editMenu(
+        ctx,
+        formatHint('👁 Трекер', 'Steam не отдал профиль. Проверь ссылку и попробуй снова.'),
+        trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
+      );
+      return;
+    }
+
+    state.trackerCandidate = steamId;
+    state.status = 'tracker_confirm';
+    userState.set(ctx.from.id, state);
+
+    await editMenu(
+      ctx,
+      `${trackerCardText(status, steamId)}\n\nСледить за ним?`,
+      trackerConfirmKeyboard()
+    );
     return;
   }
 
@@ -2686,6 +3084,7 @@ let healthServer;
 
 async function shutdown(signal) {
   console.log(`${signal} received, shutting down...`);
+  tracker.stop();
   bot.stop(signal);
   await browserPool.close();
 
@@ -2698,16 +3097,19 @@ async function shutdown(signal) {
 
 async function main() {
   await browserPool.init();
+  await tracker.load();
   await Promise.all(Object.values(photoAssets).map(asset => warmupPhotoAsset(asset))).catch(error => {
     console.warn('Failed to warm up menu photos:', error.message);
   });
   healthServer = startHealthServer();
   await bot.telegram.setMyCommands([
-    { command: 'start', description: 'Открыть меню' }
+    { command: 'start', description: 'Открыть меню' },
+    { command: 'tracker', description: 'Трекер профилей' }
   ]).catch(error => {
     console.warn('Failed to set bot commands:', error.description || error.message);
   });
   await bot.launch({ dropPendingUpdates: true });
+  tracker.start(handleTrackerChanges);
   console.log('Bot started');
 }
 

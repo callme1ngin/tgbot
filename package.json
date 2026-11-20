@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "tg-html-bot",
   "version": "1.0.0",
   "description": "",
@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/bot.js",
     "bundle:friendpage": "node scripts/bundle-friendpage.js",
-    "check": "node --check src/bot.js && node --check src/browser-pool.js && node --check src/request-queue.js && node --check src/screenshot-cache.js && node --check src/config.js && node --check scripts/bundle-friendpage.js"
+    "check": "node --check src/bot.js && node --check src/tracker.js && node --check src/browser-pool.js && node --check src/request-queue.js && node --check src/screenshot-cache.js && node --check src/config.js && node --check scripts/bundle-friendpage.js"
   },
   "keywords": [],
   "author": "",
