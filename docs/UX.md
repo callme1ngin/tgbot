@@ -33,7 +33,7 @@
 │   │   ├── 🎯 Fake Code
 │   │   ├── ❓ Not Found
 │   │   └── ⛔ Ban   → 30 Mins … 7 Days, ✏️ Custom
-│   └── ⚔️ Dota2 Code
+│   └── ⚔️ D2 Code
 │       ├── 🎯 Fake Code   (готовая картинка)
 │       ├── ❓ Not Found
 │       └── 🚫 Not Friends

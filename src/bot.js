@@ -536,10 +536,10 @@ function formatHintRaw(titleHtml, text) {
 // Свои эмодзи у разделов — те же ID, что у кнопок в корне. В тексте они ставятся через <tg-emoji>,
 // потому что это не кнопка. Глиф внутри тега обычный: он же и фолбэк, если боту custom emoji запрещены.
 const SECTION_ICONS = {
-  menu: '5416041192905265756',
-  profile: '5391112412445288650',
-  codes: '5361741454685256344',
-  tracker: '5231012545799666522'
+  menu: '5769662403188892779',
+  profile: '5769485643809824170',
+  codes: '5767203933843890630',
+  tracker: '5769443797943475946'
 };
 
 function sectionLabel(name, glyph, title) {
@@ -578,7 +578,7 @@ function screenLabel(templateName, mode) {
 // Шапки экранов, у которых есть свой премиум-эмодзи. Пока только QR; остальные ждут ID и идут обычным
 // эмодзи из templateLabel. В тексте эмодзи — <tg-emoji>, глиф внутри тега остаётся фолбэком.
 const SCREEN_ICONS = {
-  [config.TEMPLATES.QR_FRIEND]: { id: '5422814644093868925', glyph: '📷', title: 'QR-страница' }
+  [config.TEMPLATES.QR_FRIEND]: { id: '5769163860565041689', glyph: '📷', title: 'QR-страница' }
 };
 
 function screenTitle(templateName, mode) {
@@ -1781,7 +1781,7 @@ function codesKeyboard() {
   return {
     inline_keyboard: [
       [b('🎯 CS2 Code', 'cs2_menu')],
-      [b('⚔️ Dota2 Code', 'dota_menu')],
+      [b('⚔️ D2 Code', 'dota_menu')],
       homeRow()
     ]
   };
@@ -1930,11 +1930,11 @@ function templateLabel(templateName) {
   }
 
   if (templateName === config.TEMPLATES.DOTA_NOT_FOUND) {
-    return '❓ Dota2 Not Found';
+    return '❓ D2 Not Found';
   }
 
   if (templateName === config.TEMPLATES.DOTA_NOT_FRIENDS) {
-    return '🚫 Dota2 Not Friends';
+    return '🚫 D2 Not Friends';
   }
 
   return templateName;
@@ -2628,7 +2628,7 @@ bot.action('section_profile', async (ctx) => {
 
 bot.action('section_codes', async (ctx) => {
   await ctx.answerCbQuery();
-  await showSection(ctx, CODES_LABEL, 'CS2 и Dota2.', codesKeyboard());
+  await showSection(ctx, CODES_LABEL, 'CS2 и D2.', codesKeyboard());
 });
 
 // «Ещё раз» возвращает тот же экран в состояние «ждём ссылку», не заставляя идти по меню заново.
@@ -2824,7 +2824,7 @@ bot.action('dota_menu', async (ctx) => {
   state.status = 'choosing_dota_template';
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · Dota2', 'Выбери экран.'), dotaKeyboard());
+  await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · D2', 'Выбери экран.'), dotaKeyboard());
 });
 
 bot.action('dota_not_found', (ctx) => startDotaFlow(ctx, config.TEMPLATES.DOTA_NOT_FOUND));
@@ -2844,14 +2844,14 @@ async function sendDotaFakeCode(ctx) {
   } catch {
     await editMenu(
       ctx,
-      formatHint('🎯 Dota2 Fake Code', 'Файл assets/dota_fake_code.png не найден на сервере.'),
+      formatHint('🎯 D2 Fake Code', 'Файл assets/dota_fake_code.png не найден на сервере.'),
       dotaKeyboard()
     );
     return;
   }
 
   await sendResult(ctx, buffer, {
-    label: '🎯 Dota2 Fake Code',
+    label: '🎯 D2 Fake Code',
     keyboard: resultTemplateKeyboard(config.TEMPLATES.DOTA_NOT_FOUND)
   });
 }
@@ -3623,7 +3623,7 @@ bot.on('text', async (ctx) => {
     if (!isDotaTemplate(state.template)) {
       state.status = 'choosing_dota_template';
       userState.set(ctx.from.id, state);
-      await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · Dota2', 'Выбери экран.'), dotaKeyboard());
+      await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · D2', 'Выбери экран.'), dotaKeyboard());
       return;
     }
 
