@@ -8,6 +8,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const config = require('./config');
 const tracker = require('./tracker');
+const captcha = require('./captcha');
 const ui = require('./ui');
 const BrowserPool = require('./browser-pool');
 const RequestQueue = require('./request-queue');
@@ -18,6 +19,31 @@ if (!config.BOT_TOKEN) {
 }
 
 const bot = new Telegraf(config.BOT_TOKEN);
+
+// Проверка на входе. Стоит первой в цепочке, поэтому всё, что регистрируется ниже — команды, кнопки,
+// текст — уже за ней: до правильного ответа бот не показывает ни одного экрана.
+bot.use(async (ctx, next) => {
+  const userId = ctx.from?.id;
+
+  if (!userId || captcha.isVerified(userId)) {
+    return next();
+  }
+
+  // Ответ на саму капчу обрабатывает свой action: здесь только пропускаем его дальше.
+  if (String(ctx.callbackQuery?.data || '').startsWith('captcha_')) {
+    return next();
+  }
+
+  if (ctx.callbackQuery) {
+    await ctx.answerCbQuery().catch(() => {});
+  }
+
+  if (ctx.message) {
+    await deleteIncomingMessage(ctx).catch(() => {});
+  }
+
+  return showCaptcha(ctx);
+});
 
 const DEFAULT_SCREENSHOT_VIEWPORT = {
   width: Number(process.env.SCREENSHOT_WIDTH || 1920),
@@ -2415,6 +2441,90 @@ async function selectAddErrorMode(ctx, mode) {
   );
 }
 
+// Карточка проверки. Одна на пользователя: пример, три варианта, один верный. Пока пауза — вместо
+// примера счётчик, чтобы ожидание не выглядело зависшим ботом.
+const CAPTCHA_LABEL = '🧩 Проверка';
+const CAPTCHA_RETRY = 'captcha_retry';
+
+async function showCaptcha(ctx) {
+  const userId = ctx.from.id;
+  const left = captcha.cooldownLeft(userId);
+
+  if (left > 0) {
+    await editMenu(
+      ctx,
+      formatHint(CAPTCHA_LABEL, `Слишком много попыток. Следующая через ${Math.ceil(left / 1000)} с.`),
+      { inline_keyboard: [[b('🔄 Проверить снова', CAPTCHA_RETRY)]] }
+    );
+    return;
+  }
+
+  const task = captcha.challenge(userId);
+  const attempts = captcha.attemptsLeft(userId);
+  const footer = attempts < captcha.MAX_WRONG
+    ? 'Неверно. Осталась одна попытка.'
+    : 'Реши пример, чтобы войти.';
+
+  await editMenu(
+    ctx,
+    formatHint(CAPTCHA_LABEL, `${task.a} ${task.op} ${task.b} = ?\n${footer}`),
+    {
+      inline_keyboard: [
+        task.options.map((value, index) => b(String(value), `captcha_${task.gen}_${index}`))
+      ]
+    }
+  );
+}
+
+bot.action(/^captcha_(\d+)_(\d+)$/, async (ctx) => {
+  const userId = ctx.from.id;
+  const left = captcha.cooldownLeft(userId);
+
+  if (left > 0) {
+    await ctx.answerCbQuery(`Подожди ещё ${Math.ceil(left / 1000)} с`, { show_alert: true });
+    await showCaptcha(ctx);
+    return;
+  }
+
+  const result = captcha.submit(userId, Number(ctx.match[1]), Number(ctx.match[2]));
+
+  if (result.status === 'ok') {
+    captcha.verify(userId);
+    await ctx.answerCbQuery('Проверка пройдена');
+    await showTemplateMenu(ctx);
+    return;
+  }
+
+  if (result.status === 'stale') {
+    await ctx.answerCbQuery('Кнопка устарела, вот новая');
+    await showCaptcha(ctx);
+    return;
+  }
+
+  if (result.cooldown > 0) {
+    await ctx.answerCbQuery(
+      `Две ошибки. Следующая попытка через ${Math.ceil(result.cooldown / 1000)} с`,
+      { show_alert: true }
+    );
+  } else {
+    await ctx.answerCbQuery(`Неверно. Попыток осталось: ${result.attemptsLeft}`);
+  }
+
+  await showCaptcha(ctx);
+});
+
+bot.action(CAPTCHA_RETRY, async (ctx) => {
+  const left = captcha.cooldownLeft(ctx.from.id);
+
+  if (left > 0) {
+    await ctx.answerCbQuery(`Ещё ${Math.ceil(left / 1000)} с`, { show_alert: true });
+    return;
+  }
+
+  await ctx.answerCbQuery();
+  await showCaptcha(ctx);
+});
+
 function startHealthServer() {
   const server = http.createServer((req, res) => {
     if (req.url !== '/health') {
@@ -2431,7 +2541,8 @@ function startHealthServer() {
         waiting: requestQueue.getQueueLength()
       },
       browser: browserPool.getStats(),
-      tracker: tracker.status()
+      tracker: tracker.status(),
+      captcha: captcha.stats()
     }));
   });
 
@@ -3833,6 +3944,10 @@ async function shutdown(signal) {
   console.log(`${signal} received, shutting down...`);
   tracker.stop();
   bot.stop(signal);
+
+  // Капча пишет состояние сразу, но последняя запись могла быть в полёте: дожидаемся её до выхода,
+  // иначе только что пройденная проверка потеряется при рестарте.
+  await captcha.flush().catch(() => {});
   await browserPool.close();
 
   if (healthServer) {
