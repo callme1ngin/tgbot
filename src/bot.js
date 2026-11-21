@@ -2633,8 +2633,7 @@ function trackerMenuText(ctx) {
   const profiles = tracker.listProfiles(ctx.from.id);
   const notifyOn = tracker.notifyEnabled(ctx.from.id);
 
-  return formatHintRaw(
-    `${TRACKER_TITLE} Трекер`,
+  return trackerHint(
     [
       `Профилей: ${profiles.length} из ${tracker.MAX_PER_USER}.`,
       `Уведомления: ${notifyOn ? 'включены' : 'выключены'}.`,
@@ -2645,7 +2644,7 @@ function trackerMenuText(ctx) {
 
 function trackerCardText(profile, steamId, tail) {
   return formatHintRaw(
-    `${TRACKER_TITLE} ${escapeHtml(profile.name || steamId)}`,
+    `${TRACKER_LABEL} · ${escapeHtml(profile.name || steamId)}`,
     [trackerStatusLabel(profile), `SteamID: ${steamId}`, tail].filter(Boolean).join('\n')
   );
 }

@@ -9,17 +9,17 @@
     "again": { "icon": "", "style": "primary" },
 
     "template_friend": { "icon": "5382322671679708881", "style": "primary" },
-    "qr_friend": { "icon": "5381990043642502553", "style": "primary" },
+    "qr_friend": { "icon": "5422814644093868925", "style": "primary" },
     "template_add_error": { "icon": "5381879959335738545", "style": "primary" },
     "template_error": { "icon": "5382054253403577563", "style": "primary" },
     "template_steam_china": { "icon": "5391197405553107640", "style": "primary" },
 
-    "friend_variant_pc": { "icon": "", "style": "" },
-    "friend_variant_mobile": { "icon": "", "style": "" },
+    "friend_variant_pc": { "icon": "5334814414921032502", "style": "" },
+    "friend_variant_mobile": { "icon": "5850292279503228917", "style": "" },
 
     "add_error_profile": { "icon": "", "style": "" },
-    "add_error_friendlink": { "icon": "", "style": "" },
-    "add_error_phone": { "icon": "", "style": "" },
+    "add_error_friendlink": { "icon": "5271604874419647061", "style": "" },
+    "add_error_phone": { "icon": "5850292279503228917", "style": "" },
 
     "cs2_menu": { "icon": "5348405611295943406", "style": "primary" },
     "dota_menu": { "icon": "5319066603797635666", "style": "primary" },
