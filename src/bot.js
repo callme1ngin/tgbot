@@ -492,6 +492,24 @@ function formatHintRaw(titleHtml, text) {
   return `<blockquote><b>${titleHtml}</b>\n${escapeHtml(text)}</blockquote>`;
 }
 
+// Свои эмодзи у разделов — те же ID, что у кнопок в корне. В тексте они ставятся через <tg-emoji>,
+// потому что это не кнопка. Глиф внутри тега обычный: он же и фолбэк, если боту custom emoji запрещены.
+const SECTION_ICONS = {
+  menu: '5416041192905265756',
+  profile: '5391112412445288650',
+  codes: '5361741454685256344',
+  tracker: '5231012545799666522'
+};
+
+function sectionLabel(name, glyph, title) {
+  return `<tg-emoji emoji-id="${SECTION_ICONS[name]}">${glyph}</tg-emoji> ${title}`;
+}
+
+const MENU_LABEL = sectionLabel('menu', '🏠', 'Меню');
+const PROFILE_LABEL = sectionLabel('profile', '🎭', 'Профиль');
+const CODES_LABEL = sectionLabel('codes', '🎮', 'Коды');
+const TRACKER_LABEL = sectionLabel('tracker', '📡', 'Трекер');
+
 function addErrorModeLabel(mode) {
   if (mode === 'profile') {
     return 'Профиль';
@@ -2248,7 +2266,7 @@ async function showTemplateMenu(ctx, options = {}) {
     await deleteIncomingMessage(ctx);
   }
 
-  await replaceMenuWithPhoto(ctx, SILENTLOGO_PATH, formatHint('🏠 Меню', 'Выбери раздел.'), mainKeyboard());
+  await replaceMenuWithPhoto(ctx, SILENTLOGO_PATH, formatHintRaw(MENU_LABEL, 'Выбери раздел.'), mainKeyboard());
 }
 
 async function selectTemplate(ctx, templateName) {
@@ -2379,8 +2397,8 @@ bot.action('root_menu', async (ctx) => {
 });
 
 // Раздел — это просто меню с другим набором кнопок; состояние обнуляется, чтобы «Ещё раз» из старого
-// экрана не утащило в прежний шаблон.
-async function showSection(ctx, title, text, keyboard) {
+// экрана не утащило в прежний шаблон. Заголовок приходит готовым HTML: в нём стоит <tg-emoji>.
+async function showSection(ctx, titleHtml, text, keyboard) {
   const state = getUserState(ctx);
   state.template = null;
   state.staticScreen = null;
@@ -2390,17 +2408,17 @@ async function showSection(ctx, title, text, keyboard) {
   state.cs2Profile = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHint(title, text), keyboard);
+  await editMenu(ctx, formatHintRaw(titleHtml, text), keyboard);
 }
 
 bot.action('section_profile', async (ctx) => {
   await ctx.answerCbQuery();
-  await showSection(ctx, '🎭 Профиль', 'Что собрать?', profileKeyboard());
+  await showSection(ctx, PROFILE_LABEL, 'Что собрать?', profileKeyboard());
 });
 
 bot.action('section_codes', async (ctx) => {
   await ctx.answerCbQuery();
-  await showSection(ctx, '🎮 Коды', 'CS2 и Dota2.', codesKeyboard());
+  await showSection(ctx, CODES_LABEL, 'CS2 и Dota2.', codesKeyboard());
 });
 
 // «Ещё раз» возвращает тот же экран в состояние «ждём ссылку», не заставляя идти по меню заново.
@@ -2538,7 +2556,7 @@ bot.action('cs2_menu', async (ctx) => {
   state.cs2Profile = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHint('🎮 Коды · CS2', 'Выбери экран.'), cs2Keyboard());
+  await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · CS2', 'Выбери экран.'), cs2Keyboard());
 });
 
 bot.action('cs2_fake_code', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_WRONG_CODE));
@@ -2568,7 +2586,7 @@ bot.action('dota_menu', async (ctx) => {
   state.status = 'choosing_dota_template';
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHint('🎮 Коды · Dota2', 'Выбери экран.'), dotaKeyboard());
+  await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · Dota2', 'Выбери экран.'), dotaKeyboard());
 });
 
 bot.action('dota_not_found', (ctx) => startDotaFlow(ctx, config.TEMPLATES.DOTA_NOT_FOUND));
@@ -2607,13 +2625,8 @@ bot.action('dota_fake_code', async (ctx) => {
 
 /* ---------- tracker ---------- */
 
-// Кастомный эмодзи в тексте — не кнопка, а <tg-emoji>. Виден тем, у кого Premium; остальным достаётся
-// обычный 📡 внутри тега. Название раздела написано здесь, поэтому в шапку идёт как есть.
-const TRACKER_ICON = '5231012545799666522';
-const TRACKER_TITLE = `<tg-emoji emoji-id="${TRACKER_ICON}">📡</tg-emoji>`;
-
 function trackerHint(text) {
-  return formatHintRaw(`${TRACKER_TITLE} Трекер`, text);
+  return formatHintRaw(TRACKER_LABEL, text);
 }
 
 function trackerMenuText(ctx) {
@@ -2987,7 +3000,7 @@ bot.on('text', async (ctx) => {
     if (!isCs2Template(state.template)) {
       state.status = 'choosing_cs2_template';
       userState.set(ctx.from.id, state);
-      await editMenu(ctx, formatHint('🎮 Коды · CS2', 'Выбери экран.'), cs2Keyboard());
+      await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · CS2', 'Выбери экран.'), cs2Keyboard());
       return;
     }
 
@@ -3316,7 +3329,7 @@ bot.on('text', async (ctx) => {
     if (!isDotaTemplate(state.template)) {
       state.status = 'choosing_dota_template';
       userState.set(ctx.from.id, state);
-      await editMenu(ctx, formatHint('🎮 Коды · Dota2', 'Выбери экран.'), dotaKeyboard());
+      await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · Dota2', 'Выбери экран.'), dotaKeyboard());
       return;
     }
 
@@ -3506,7 +3519,7 @@ bot.on('text', async (ctx) => {
   if (!state?.template) {
     state.status = 'choosing_template';
     userState.set(ctx.from.id, state);
-    await ctx.reply(formatHint('🏠 Меню', 'Сначала выбери раздел.'), { parse_mode: 'HTML' });
+    await ctx.reply(formatHintRaw(MENU_LABEL, 'Сначала выбери раздел.'), { parse_mode: 'HTML' });
     return;
   }
 
