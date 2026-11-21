@@ -1624,7 +1624,7 @@ function mainKeyboard() {
   return {
     inline_keyboard: [
       [b('🎭 Профиль', 'section_profile'), b('🎮 Коды', 'section_codes')],
-      [b('📡 Трекер', 'tracker_menu'), b('❔ Помощь', 'help_screen')]
+      [b('📡 Трекер', 'tracker_menu')]
     ]
   };
 }
@@ -1650,10 +1650,6 @@ function codesKeyboard() {
       homeRow()
     ]
   };
-}
-
-function helpKeyboard() {
-  return { inline_keyboard: [homeRow()] };
 }
 
 function trackerStatusLabel(profile) {
@@ -2376,23 +2372,6 @@ bot.action('section_profile', async (ctx) => {
 bot.action('section_codes', async (ctx) => {
   await ctx.answerCbQuery();
   await showSection(ctx, '🎮 Коды', 'CS2 и Dota2.', codesKeyboard());
-});
-
-bot.action('help_screen', async (ctx) => {
-  await ctx.answerCbQuery();
-
-  await showSection(
-    ctx,
-    '❔ Помощь',
-    [
-      'Профиль — страницы Steam: обычная, с QR, ошибки.',
-      'Коды — экраны CS2 и Dota2.',
-      'Трекер — слежу за онлайном привязанных профилей.',
-      'Ссылка — адрес нашей страницы, начинается с https://',
-      '/emoji — пересланный премиум-эмодзи в его ID.'
-    ].join('\n'),
-    helpKeyboard()
-  );
 });
 
 // «Ещё раз» возвращает тот же экран в состояние «ждём ссылку», не заставляя идти по меню заново.

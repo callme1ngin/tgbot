@@ -24,8 +24,7 @@
 
 ## Полный список ключей
 
-Разделы и навигация: `section_profile`, `section_codes`, `tracker_menu`, `help_screen`, `root_menu`,
-`again`.
+Разделы и навигация: `section_profile`, `section_codes`, `tracker_menu`, `root_menu`, `again`.
 
 Профиль: `template_friend`, `qr_friend`, `template_add_error`, `template_error`, `template_steam_china`,
 `friend_variant_pc`, `friend_variant_mobile`, `add_error_profile`, `add_error_friendlink`,

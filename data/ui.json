@@ -4,7 +4,6 @@
     "section_profile": { "icon": "", "style": "primary" },
     "section_codes": { "icon": "", "style": "primary" },
     "tracker_menu": { "icon": "", "style": "primary" },
-    "help_screen": { "icon": "", "style": "" },
 
     "root_menu": { "icon": "", "style": "" },
     "again": { "icon": "", "style": "primary" },
