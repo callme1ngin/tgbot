@@ -26,9 +26,9 @@
 
 Разделы и навигация: `section_profile`, `section_codes`, `tracker_menu`, `root_menu`, `again`.
 
-Профиль: `template_friend`, `qr_friend`, `template_add_error`, `template_error`, `template_steam_china`,
-`friend_variant_pc`, `friend_variant_mobile`, `add_error_profile`, `add_error_friendlink`,
-`add_error_phone`, `add_friend_code`.
+Профиль: `template_friend`, `qr_friend`, `template_steam_notice`, `template_add_error`, `template_error`,
+`template_steam_china`, `friend_variant_pc`, `friend_variant_mobile`, `add_error_profile`,
+`add_error_friendlink`, `add_error_phone`, `add_friend_code`.
 
 Коды: `cs2_menu`, `dota_menu`, `cs2_fake_code`, `cs2_not_found`, `cs2_ban`, `cs2b_custom`,
 `dota_fake_code`, `dota_not_found`, `dota_not_friends`. Время бана (`cs2b_30m` … `cs2b_7d`) стиля не

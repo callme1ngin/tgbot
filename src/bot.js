@@ -1580,6 +1580,59 @@ async function processQrFriendRequest(url) {
   return imageBuffer;
 }
 
+// «Steam Fake Alert»: готовая подложка с двумя текстовыми слоями — адресная строка и строка уведомления.
+// Ссылка одна, а мест два: шаблон сам раскладывает её на protocol/host/path для адреса и пишет целиком
+// в уведомление (window.setUrl). Данные идут через textContent, поэтому HTML из ссылки не выполнится.
+const STEAM_NOTICE_VIEWPORT = { width: 1917, height: 1032 };
+
+async function processSteamNoticeRequest(link) {
+  const cacheKey = screenshotCache.generateKey(link, config.TEMPLATES.STEAM_NOTICE, {
+    renderVersion: SCREENSHOT_CACHE_VERSION
+  });
+  const cached = screenshotCache.get(cacheKey);
+
+  if (cached) {
+    console.log(`Cache hit for ${config.TEMPLATES.STEAM_NOTICE}: ${link}`);
+    return cached;
+  }
+
+  const template = await loadTemplate(config.TEMPLATES.STEAM_NOTICE);
+  const page = await browserPool.getPage();
+
+  let imageBuffer;
+
+  try {
+    await page.setViewportSize(STEAM_NOTICE_VIEWPORT);
+    await page.setContent(template.html, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+    const ready = await page.evaluate((url) => {
+      window.setUrl(url);
+      return window.__renderReady === true;
+    }, link);
+
+    if (!ready) {
+      throw new Error('steam notice template did not report render ready');
+    }
+
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true))));
+
+    const shot = await page.$('#shot');
+
+    if (!shot) {
+      throw new Error('steam notice template has no #shot element');
+    }
+
+    imageBuffer = await shot.screenshot({ type: 'png' });
+  } finally {
+    await browserPool.releasePage(page);
+  }
+
+  screenshotCache.set(cacheKey, imageBuffer);
+  console.log(`Screenshot created for ${config.TEMPLATES.STEAM_NOTICE}: ${link}`);
+
+  return imageBuffer;
+}
+
 // Phone version of the add-friend error screen. Its data is not the uppercase placeholder set either:
 // six lowercase keys, and the friend card is the profile from the link while the code is typed by the
 // operator — the same code that "failed" to send an invitation.
@@ -1674,6 +1727,7 @@ function profileKeyboard() {
     inline_keyboard: [
       [b('📨 Страница друга', 'template_friend')],
       [b('📷 QR-страница', 'qr_friend')],
+      [b('🚨 Steam Fake Alert', 'template_steam_notice')],
       [b('🫂 Ошибка добавления', 'template_add_error')],
       [b('⚠️ Ошибка браузера', 'template_error')],
       [b('🇨🇳 Steam China', 'template_steam_china')],
@@ -1806,6 +1860,10 @@ function templateLabel(templateName) {
     return '📷 QR-страница';
   }
 
+  if (templateName === config.TEMPLATES.STEAM_NOTICE) {
+    return '🚨 Steam Fake Alert';
+  }
+
   if (templateName === config.TEMPLATES.ERROR) {
     return '⚠️ Ошибка браузера';
   }
@@ -1852,6 +1910,10 @@ function templatePrompt(templateName) {
 
   if (templateName === config.TEMPLATES.ERROR) {
     return 'Отправь friend link кита';
+  }
+
+  if (templateName === config.TEMPLATES.STEAM_NOTICE) {
+    return 'Отправь френдлинк кита.';
   }
 
   if (templateName === config.TEMPLATES.ADD_ERROR) {
@@ -2484,6 +2546,12 @@ bot.action('again', async (ctx) => {
     return;
   }
 
+  if (template === config.TEMPLATES.STEAM_NOTICE) {
+    await ctx.answerCbQuery();
+    await showSteamNoticePrompt(ctx, template);
+    return;
+  }
+
   if (template === config.TEMPLATES.ADD_ERROR && state.addErrorMode) {
     await ctx.answerCbQuery();
 
@@ -2542,6 +2610,28 @@ bot.action('qr_friend', async (ctx) => {
     formatTemplateHint(config.TEMPLATES.QR_FRIEND, 'Отправь ссылку на фейк.'),
     waitingKeyboard(config.TEMPLATES.QR_FRIEND)
   );
+});
+
+// Один вопрос — один экран: ссылка кита уходит и в адресную строку, и в само уведомление, поэтому
+// подпись говорит это прямо, чтобы оператор не искал второе поле.
+async function showSteamNoticePrompt(ctx, templateName) {
+  const state = getUserState(ctx);
+  state.template = templateName;
+  state.status = 'waiting_notice_link';
+  state.addErrorMode = null;
+  state.addErrorData = null;
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatTemplateHint(templateName, 'Отправь френдлинк кита — встанет в адрес и в уведомление.'),
+    waitingKeyboard(templateName)
+  );
+}
+
+bot.action('template_steam_notice', async (ctx) => {
+  await ctx.answerCbQuery();
+  await showSteamNoticePrompt(ctx, config.TEMPLATES.STEAM_NOTICE);
 });
 bot.action('add_error_profile', (ctx) => selectAddErrorMode(ctx, 'profile'));
 bot.action('add_error_friendlink', (ctx) => selectAddErrorMode(ctx, 'friendlink'));
@@ -3265,6 +3355,63 @@ bot.on('text', async (ctx) => {
         ctx,
         formatTemplateHint(config.TEMPLATES.QR_FRIEND, 'Не удалось собрать изображение. Отправь ссылку ещё раз.'),
         errorKeyboard(config.TEMPLATES.QR_FRIEND)
+      );
+    }
+
+    return;
+  }
+
+  if (state.status === 'waiting_notice_link') {
+    await deleteIncomingMessage(ctx);
+
+    const raw = url.trim();
+    const link = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+    // Ссылка никуда не запрашивается, она только рисуется: хватает проверки синтаксиса. DNS здесь был бы
+    // лишним — китайские и приватные короткие домены с сервера видны не всегда.
+    try {
+      parseHttpUrl(link);
+    } catch {
+      await editMenu(
+        ctx,
+        formatTemplateHint(state.template, 'Это не ссылка. Нужен адрес, начиная с http:// или https://.'),
+        waitingKeyboard(state.template)
+      );
+      return;
+    }
+
+    let progressMessage;
+
+    try {
+      state.status = 'processing_notice';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(ctx, 'Собираю изображение…');
+
+      const taskId = `${ctx.from.id}_notice_${Date.now()}`;
+      const imageBuffer = await requestQueue.add(taskId, () => processSteamNoticeRequest(link));
+
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_notice_link';
+      userState.set(ctx.from.id, state);
+
+      await sendResult(ctx, imageBuffer, {
+        label: screenTitle(state.template, state.addErrorMode),
+        status: '✅ Ссылка встала в два места',
+        keyboard: resultTemplateKeyboard(state.template)
+      });
+    } catch (error) {
+      console.error('Steam notice request error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_notice_link';
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatTemplateHint(state.template, 'Не удалось собрать изображение. Отправь ссылку ещё раз.'),
+        errorKeyboard(state.template)
       );
     }
 
