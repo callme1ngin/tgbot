@@ -6,7 +6,7 @@
     "tracker_menu": { "icon": "5769443797943475946", "style": "primary" },
 
     "root_menu": { "icon": "5769662403188892779", "style": "" },
-    "again": { "icon": "", "style": "primary" },
+    "again": { "icon": "5769204478070759696", "style": "primary" },
 
     "template_friend": { "icon": "5769615089829160389", "style": "primary" },
     "qr_friend": { "icon": "5769163860565041689", "style": "primary" },
@@ -27,17 +27,17 @@
     "cs2_fake_code": { "icon": "5769364285213909331", "style": "" },
     "cs2_not_found": { "icon": "5767296748087157309", "style": "" },
     "cs2_ban": { "icon": "5769362077600719279", "style": "danger" },
-    "cs2b_custom": { "icon": "", "style": "" },
+    "cs2b_custom": { "icon": "5769449351336175280", "style": "" },
     "dota_fake_code": { "icon": "5769339808195290055", "style": "" },
     "dota_not_found": { "icon": "5769128663308054068", "style": "" },
     "dota_not_friends": { "icon": "5769182848615463136", "style": "" },
 
-    "add_friend_code": { "icon": "", "style": "primary" },
+    "add_friend_code": { "icon": "5769472342296109033", "style": "primary" },
 
     "tracker_add": { "icon": "5769487061149033124", "style": "success" },
     "tracker_list": { "icon": "5769468154703002173", "style": "" },
     "tracker_notify": { "icon": "5769390725032583430", "style": "" },
-    "tracker_confirm": { "icon": "", "style": "success" },
+    "tracker_confirm": { "icon": "5769362597291762356", "style": "success" },
     "tracker_open_*": { "icon": "", "style": "" },
     "tracker_refresh_*": { "icon": "", "style": "" },
     "tracker_remove_*": { "icon": "", "style": "danger" }
