@@ -567,28 +567,37 @@ function addErrorModeLabel(mode) {
   return '';
 }
 
-// Подпись экрана в шапке: раздел · вариант. Вариант есть только у экрана с типом ссылки.
-function screenLabel(templateName, mode) {
-  const label = templateLabel(templateName);
-  const modeLabel = templateName === config.TEMPLATES.ADD_ERROR ? addErrorModeLabel(mode) : '';
-
-  return modeLabel ? `${label} · ${modeLabel}` : label;
-}
-
-// Шапки экранов, у которых есть свой премиум-эмодзи. Пока только QR; остальные ждут ID и идут обычным
-// эмодзи из templateLabel. В тексте эмодзи — <tg-emoji>, глиф внутри тега остаётся фолбэком.
+// Шапки экранов со своим премиум-эмодзи — те же ID, что у кнопок, ведущих на экран. В тексте эмодзи
+// идёт через <tg-emoji>, глиф внутри тега остаётся фолбэком, если боту custom emoji запрещены.
 const SCREEN_ICONS = {
-  [config.TEMPLATES.QR_FRIEND]: { id: '5769163860565041689', glyph: '📷', title: 'QR-страница' }
+  [config.TEMPLATES.FRIEND]: { id: '5769615089829160389', glyph: '📨', title: 'Страница друга · ПК' },
+  [config.TEMPLATES.FRIEND_MOBILE]: { id: '5769615089829160389', glyph: '📨', title: 'Страница друга · Телефон' },
+  [config.TEMPLATES.QR_FRIEND]: { id: '5769163860565041689', glyph: '📷', title: 'QR-страница' },
+  [config.TEMPLATES.STEAM_NOTICE]: { id: '5769318599646781593', glyph: '🚨', title: 'Steam Fake Alert' },
+  [config.TEMPLATES.ADD_ERROR]: { id: '5769180082656518775', glyph: '🫂', title: 'Ошибка добавления' },
+  [config.TEMPLATES.ERROR]: { id: '5766962281803948850', glyph: '⚠️', title: 'Ошибка браузера' },
+  [config.TEMPLATES.STEAM_CHINA]: { id: '5769172811276887156', glyph: '🇨🇳', title: 'Steam China' },
+  [config.TEMPLATES.CS2_WRONG_CODE]: { id: '5769364285213909331', glyph: '🎯', title: 'CS2 Fake Code' },
+  [config.TEMPLATES.CS2_NOT_FOUND]: { id: '5767296748087157309', glyph: '❓', title: 'CS2 Code Not Found' },
+  [config.TEMPLATES.CS2_BAN]: { id: '5769362077600719279', glyph: '⛔', title: 'CS2 Ban' },
+  [config.TEMPLATES.DOTA_NOT_FOUND]: { id: '5769128663308054068', glyph: '❓', title: 'D2 Not Found' },
+  [config.TEMPLATES.DOTA_NOT_FRIENDS]: { id: '5769182848615463136', glyph: '🚫', title: 'D2 Not Friends' }
 };
+
+// Экрана нет в шаблонах — это готовая картинка, но эмодзи у неё свой, из того же набора.
+const D2_FAKE_CODE_LABEL = '<tg-emoji emoji-id="5769339808195290055">🎯</tg-emoji> D2 Fake Code';
+
+// Выбор варианта — не шаблон, но шапка та же, что у самого экрана.
+const FRIEND_LABEL = `<tg-emoji emoji-id="${SCREEN_ICONS[config.TEMPLATES.FRIEND].id}">📨</tg-emoji> Страница друга`;
 
 function screenTitle(templateName, mode) {
   const custom = SCREEN_ICONS[templateName];
+  const modeLabel = templateName === config.TEMPLATES.ADD_ERROR ? addErrorModeLabel(mode) : '';
+  const base = custom
+    ? `<tg-emoji emoji-id="${custom.id}">${custom.glyph}</tg-emoji> ${custom.title}`
+    : escapeHtml(templateLabel(templateName));
 
-  if (custom) {
-    return `<tg-emoji emoji-id="${custom.id}">${custom.glyph}</tg-emoji> ${custom.title}`;
-  }
-
-  return escapeHtml(screenLabel(templateName, mode));
+  return modeLabel ? `${base} · ${escapeHtml(modeLabel)}` : base;
 }
 
 function formatTemplateHint(templateName, text, mode) {
@@ -2411,7 +2420,7 @@ async function selectTemplate(ctx, templateName) {
 
     await editMenu(
       ctx,
-      formatHint('📨 Страница друга', 'Как открывать страницу?'),
+      formatHintRaw(FRIEND_LABEL, 'Как открывать страницу?'),
       friendVariantKeyboard()
     );
     return;
@@ -2844,14 +2853,14 @@ async function sendDotaFakeCode(ctx) {
   } catch {
     await editMenu(
       ctx,
-      formatHint('🎯 D2 Fake Code', 'Файл assets/dota_fake_code.png не найден на сервере.'),
+      formatHintRaw(D2_FAKE_CODE_LABEL, 'Файл assets/dota_fake_code.png не найден на сервере.'),
       dotaKeyboard()
     );
     return;
   }
 
   await sendResult(ctx, buffer, {
-    label: '🎯 D2 Fake Code',
+    label: D2_FAKE_CODE_LABEL,
     keyboard: resultTemplateKeyboard(config.TEMPLATES.DOTA_NOT_FOUND)
   });
 }
