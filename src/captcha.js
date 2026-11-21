@@ -13,7 +13,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = process.env.CAPTCHA_FILE || path.join(DATA_DIR, 'captcha-state.json');
 
 const MAX_WRONG = Number(process.env.CAPTCHA_MAX_WRONG || 2);
-const COOLDOWN_MS = Number(process.env.CAPTCHA_COOLDOWN_MS || 60000);
+const COOLDOWN_MS = Number(process.env.CAPTCHA_COOLDOWN_MS || 3 * 60 * 1000);
 const BYPASS_IDS = new Set(
   String(process.env.CAPTCHA_BYPASS_IDS || '')
     .split(',')
@@ -44,6 +44,17 @@ function cooldownLeft(userId) {
 
 function attemptsLeft(userId) {
   return Math.max(0, MAX_WRONG - (wrong.get(Number(userId)) || 0));
+}
+
+// «15 мин» читается, «899 с» — нет. Секунды остаются только на последней минуте.
+function humanLeft(ms) {
+  const seconds = Math.ceil(ms / 1000);
+
+  if (seconds < 60) {
+    return `${seconds} с`;
+  }
+
+  return `${Math.ceil(seconds / 60)} мин`;
 }
 
 // Два слагаемых до 20 — считается в голове за секунду, а варианты не угадываются по величине.
@@ -226,6 +237,7 @@ module.exports = {
   isVerified,
   cooldownLeft,
   attemptsLeft,
+  humanLeft,
   challenge,
   submit,
   verify,

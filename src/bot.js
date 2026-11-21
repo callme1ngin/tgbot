@@ -22,6 +22,9 @@ const bot = new Telegraf(config.BOT_TOKEN);
 
 // Проверка на входе. Стоит первой в цепочке, поэтому всё, что регистрируется ниже — команды, кнопки,
 // текст — уже за ней: до правильного ответа бот не показывает ни одного экрана.
+//
+// Пока идёт пауза, любое действие получает только всплывающее уведомление: ни новых сообщений, ни
+// новых карточек. Единственное, что правится, — сама карточка паузы, и то на месте.
 bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
 
@@ -29,17 +32,29 @@ bot.use(async (ctx, next) => {
     return next();
   }
 
-  // Ответ на саму капчу обрабатывает свой action: здесь только пропускаем его дальше.
-  if (String(ctx.callbackQuery?.data || '').startsWith('captcha_')) {
+  const left = captcha.cooldownLeft(userId);
+  const isCaptchaAnswer = String(ctx.callbackQuery?.data || '').startsWith('captcha_');
+
+  if (isCaptchaAnswer && left === 0) {
     return next();
   }
 
   if (ctx.callbackQuery) {
+    if (left > 0) {
+      await ctx.answerCbQuery(cooldownText(left), { show_alert: true }).catch(() => {});
+      return undefined;
+    }
+
     await ctx.answerCbQuery().catch(() => {});
+    return showCaptcha(ctx);
   }
 
   if (ctx.message) {
     await deleteIncomingMessage(ctx).catch(() => {});
+  }
+
+  if (left > 0) {
+    return refreshCooldownCard(ctx, left);
   }
 
   return showCaptcha(ctx);
@@ -2446,16 +2461,26 @@ async function selectAddErrorMode(ctx, mode) {
 const CAPTCHA_LABEL = '🧩 Проверка';
 const CAPTCHA_RETRY = 'captcha_retry';
 
+function cooldownText(left) {
+  return `Слишком много попыток. Следующая через ${captcha.humanLeft(left)}.`;
+}
+
+// Карточка паузы правится на месте: оператор видит, сколько ждать, но в чате не появляется новых
+// сообщений — сколько бы он ни нажимал.
+async function refreshCooldownCard(ctx, left) {
+  await editMenu(
+    ctx,
+    formatHint(CAPTCHA_LABEL, cooldownText(left)),
+    { inline_keyboard: [[b('🔄 Проверить снова', CAPTCHA_RETRY)]] }
+  );
+}
+
 async function showCaptcha(ctx) {
   const userId = ctx.from.id;
   const left = captcha.cooldownLeft(userId);
 
   if (left > 0) {
-    await editMenu(
-      ctx,
-      formatHint(CAPTCHA_LABEL, `Слишком много попыток. Следующая через ${Math.ceil(left / 1000)} с.`),
-      { inline_keyboard: [[b('🔄 Проверить снова', CAPTCHA_RETRY)]] }
-    );
+    await refreshCooldownCard(ctx, left);
     return;
   }
 
@@ -2481,8 +2506,7 @@ bot.action(/^captcha_(\d+)_(\d+)$/, async (ctx) => {
   const left = captcha.cooldownLeft(userId);
 
   if (left > 0) {
-    await ctx.answerCbQuery(`Подожди ещё ${Math.ceil(left / 1000)} с`, { show_alert: true });
-    await showCaptcha(ctx);
+    await ctx.answerCbQuery(cooldownText(left), { show_alert: true });
     return;
   }
 
@@ -2502,10 +2526,7 @@ bot.action(/^captcha_(\d+)_(\d+)$/, async (ctx) => {
   }
 
   if (result.cooldown > 0) {
-    await ctx.answerCbQuery(
-      `Две ошибки. Следующая попытка через ${Math.ceil(result.cooldown / 1000)} с`,
-      { show_alert: true }
-    );
+    await ctx.answerCbQuery(cooldownText(result.cooldown), { show_alert: true });
   } else {
     await ctx.answerCbQuery(`Неверно. Попыток осталось: ${result.attemptsLeft}`);
   }
@@ -2517,7 +2538,7 @@ bot.action(CAPTCHA_RETRY, async (ctx) => {
   const left = captcha.cooldownLeft(ctx.from.id);
 
   if (left > 0) {
-    await ctx.answerCbQuery(`Ещё ${Math.ceil(left / 1000)} с`, { show_alert: true });
+    await ctx.answerCbQuery(cooldownText(left), { show_alert: true });
     return;
   }
 
