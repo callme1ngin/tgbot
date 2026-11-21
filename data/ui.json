@@ -1,18 +1,18 @@
 {
   "//": "Вид кнопок. Ключ — callback_data или префикс с *; icon — custom_emoji_id (нужен Premium у владельца бота), style — primary | success | danger. Правки подхватываются без перезапуска.",
   "buttons": {
-    "section_profile": { "icon": "", "style": "primary" },
-    "section_codes": { "icon": "", "style": "primary" },
-    "tracker_menu": { "icon": "", "style": "primary" },
+    "section_profile": { "icon": "5391112412445288650", "style": "primary" },
+    "section_codes": { "icon": "5361741454685256344", "style": "primary" },
+    "tracker_menu": { "icon": "5231012545799666522", "style": "primary" },
 
-    "root_menu": { "icon": "", "style": "" },
+    "root_menu": { "icon": "5416041192905265756", "style": "" },
     "again": { "icon": "", "style": "primary" },
 
-    "template_friend": { "icon": "", "style": "primary" },
-    "qr_friend": { "icon": "", "style": "primary" },
-    "template_add_error": { "icon": "", "style": "primary" },
-    "template_error": { "icon": "", "style": "primary" },
-    "template_steam_china": { "icon": "", "style": "primary" },
+    "template_friend": { "icon": "5382322671679708881", "style": "primary" },
+    "qr_friend": { "icon": "5381990043642502553", "style": "primary" },
+    "template_add_error": { "icon": "5381879959335738545", "style": "primary" },
+    "template_error": { "icon": "5382054253403577563", "style": "primary" },
+    "template_steam_china": { "icon": "5391197405553107640", "style": "primary" },
 
     "friend_variant_pc": { "icon": "", "style": "" },
     "friend_variant_mobile": { "icon": "", "style": "" },
@@ -21,7 +21,7 @@
     "add_error_friendlink": { "icon": "", "style": "" },
     "add_error_phone": { "icon": "", "style": "" },
 
-    "cs2_menu": { "icon": "5206607081334906820", "style": "primary" },
+    "cs2_menu": { "icon": "", "style": "primary" },
     "dota_menu": { "icon": "", "style": "primary" },
     "cs2_fake_code": { "icon": "", "style": "" },
     "cs2_not_found": { "icon": "", "style": "" },

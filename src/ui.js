@@ -14,6 +14,10 @@ const path = require('path');
 
 const UI_FILE = process.env.UI_FILE || path.join(__dirname, '..', 'data', 'ui.json');
 
+// Вид кнопок по callback_data. Если у кнопки есть иконка, ведущий юникод-эмодзи из подписи убирается:
+// иначе рядом с кастомной иконкой стоял бы второй, обычный эмодзи. Подпись без эмодзи остаётся как есть.
+const LEADING_EMOJI = /^[\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\u200D]+[\s\u00A0]*/u;
+
 let cache = { mtime: 0, buttons: {}, fallback: {} };
 
 function readFile() {
@@ -90,6 +94,12 @@ function decorateInline(markup) {
 
         if (found.icon) {
           next.icon_custom_emoji_id = String(found.icon);
+
+          const withoutEmoji = String(button.text || '').replace(LEADING_EMOJI, '');
+
+          if (withoutEmoji) {
+            next.text = withoutEmoji;
+          }
         }
 
         if (found.style) {
