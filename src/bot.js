@@ -486,6 +486,12 @@ function formatHint(title, text) {
   return `<blockquote><b>${escapeHtml(title)}</b>\n${escapeHtml(text)}</blockquote>`;
 }
 
+// То же, но заголовок — готовый HTML (в нём может стоять <tg-emoji>). Данные в заголовок не попадают:
+// вызывающий экранирует их сам.
+function formatHintRaw(titleHtml, text) {
+  return `<blockquote><b>${titleHtml}</b>\n${escapeHtml(text)}</blockquote>`;
+}
+
 function addErrorModeLabel(mode) {
   if (mode === 'profile') {
     return 'Профиль';
@@ -2074,6 +2080,26 @@ async function replyWithCachedPhoto(ctx, photoPath, extra) {
   }
 }
 
+// Telegram вправе отказать в <tg-emoji>: кастомный эмодзи в тексте доступен не всякому боту. Тогда тот же
+// экран уходит без тегов — остаётся обычный эмодзи внутри, экран не ломается.
+function stripCustomEmoji(text) {
+  return String(text).replace(/<\/?tg-emoji[^>]*>/gi, '');
+}
+
+async function withCustomEmojiFallback(text, attempt) {
+  try {
+    return await attempt(text);
+  } catch (error) {
+    const message = String(error.description || error.message || '');
+
+    if (!String(text).includes('<tg-emoji') || !/custom emoji/i.test(message)) {
+      throw error;
+    }
+
+    return attempt(stripCustomEmoji(text));
+  }
+}
+
 async function editMenu(ctx, text, replyMarkup) {
   const state = getUserState(ctx);
   const chatId = state.chatId;
@@ -2086,12 +2112,15 @@ async function editMenu(ctx, text, replyMarkup) {
   // Готовый скриншот не переписываем: его подпись — это результат, а не меню. Раздел, открытый с
   // результата, приходит отдельным сообщением, картинка остаётся выше.
   if (messageId && chatId && state.menuKind !== 'result') {
+    const editAs = (value) =>
+      state.menuMessageType === 'photo'
+        ? ctx.telegram.editMessageCaption(chatId, messageId, undefined, value, options)
+        : ctx.telegram.editMessageText(chatId, messageId, undefined, value, options);
+    const editCaptionAs = (value) =>
+      ctx.telegram.editMessageCaption(chatId, messageId, undefined, value, options);
+
     try {
-      if (state.menuMessageType === 'photo') {
-        await ctx.telegram.editMessageCaption(chatId, messageId, undefined, text, options);
-      } else {
-        await ctx.telegram.editMessageText(chatId, messageId, undefined, text, options);
-      }
+      await withCustomEmojiFallback(text, editAs);
 
       userState.set(ctx.from.id, state);
       return;
@@ -2100,7 +2129,7 @@ async function editMenu(ctx, text, replyMarkup) {
 
       if (errorText.includes('there is no text in the message to edit')) {
         try {
-          await ctx.telegram.editMessageCaption(chatId, messageId, undefined, text, options);
+          await withCustomEmojiFallback(text, editCaptionAs);
           state.menuMessageType = 'photo';
           userState.set(ctx.from.id, state);
           return;
@@ -2123,7 +2152,7 @@ async function editMenu(ctx, text, replyMarkup) {
     }
   }
 
-  const message = await ctx.reply(text, options);
+  const message = await withCustomEmojiFallback(text, (value) => ctx.reply(value, options));
   state.menuKind = 'text';
   await saveMenuMessage(ctx, message);
 }
@@ -2578,12 +2607,21 @@ bot.action('dota_fake_code', async (ctx) => {
 
 /* ---------- tracker ---------- */
 
+// Кастомный эмодзи в тексте — не кнопка, а <tg-emoji>. Виден тем, у кого Premium; остальным достаётся
+// обычный 📡 внутри тега. Название раздела написано здесь, поэтому в шапку идёт как есть.
+const TRACKER_ICON = '5231012545799666522';
+const TRACKER_TITLE = `<tg-emoji emoji-id="${TRACKER_ICON}">📡</tg-emoji>`;
+
+function trackerHint(text) {
+  return formatHintRaw(`${TRACKER_TITLE} Трекер`, text);
+}
+
 function trackerMenuText(ctx) {
   const profiles = tracker.listProfiles(ctx.from.id);
   const notifyOn = tracker.notifyEnabled(ctx.from.id);
 
-  return formatHint(
-    '📡 Трекер',
+  return formatHintRaw(
+    `${TRACKER_TITLE} Трекер`,
     [
       `Профилей: ${profiles.length} из ${tracker.MAX_PER_USER}.`,
       `Уведомления: ${notifyOn ? 'включены' : 'выключены'}.`,
@@ -2593,8 +2631,8 @@ function trackerMenuText(ctx) {
 }
 
 function trackerCardText(profile, steamId, tail) {
-  return formatHint(
-    `📡 ${profile.name || steamId}`,
+  return formatHintRaw(
+    `${TRACKER_TITLE} ${escapeHtml(profile.name || steamId)}`,
     [trackerStatusLabel(profile), `SteamID: ${steamId}`, tail].filter(Boolean).join('\n')
   );
 }
@@ -2641,7 +2679,7 @@ bot.action('tracker_add', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHint('📡 Трекер', 'Отправь ссылку на профиль Steam или SteamID64.'),
+    trackerHint( 'Отправь ссылку на профиль Steam или SteamID64.'),
     trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
   );
 });
@@ -2659,7 +2697,7 @@ bot.action('tracker_list', async (ctx) => {
   if (profiles.length === 0) {
     await editMenu(
       ctx,
-      formatHint('📡 Трекер', 'Пока пусто. Добавь профиль, чтобы следить за ним.'),
+      trackerHint( 'Пока пусто. Добавь профиль, чтобы следить за ним.'),
       trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
     );
     return;
@@ -2667,7 +2705,7 @@ bot.action('tracker_list', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHint('📡 Трекер', `Профилей: ${profiles.length}. Выбери, чтобы открыть.`),
+    trackerHint( `Профилей: ${profiles.length}. Выбери, чтобы открыть.`),
     trackerListKeyboard(profiles)
   );
 });
@@ -2724,7 +2762,7 @@ bot.action(/^tracker_remove_(7656119[0-9]{10})$/, async (ctx) => {
   state.trackerCandidate = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHint('📡 Трекер', 'Профиль удалён из списка.'), trackerKeyboard(tracker.notifyEnabled(ctx.from.id)));
+  await editMenu(ctx, trackerHint( 'Профиль удалён из списка.'), trackerKeyboard(tracker.notifyEnabled(ctx.from.id)));
 });
 
 bot.action('tracker_confirm', async (ctx) => {
@@ -2750,8 +2788,7 @@ bot.action('tracker_confirm', async (ctx) => {
   if (!status) {
     await editMenu(
       ctx,
-      formatHint(
-        '📡 Трекер',
+      trackerHint(
         failure.includes('is not set')
           ? 'На сервере не задан STEAM_WEB_API_KEY.'
           : 'Steam не ответил. Попробуй добавить ещё раз.'
@@ -2773,7 +2810,7 @@ bot.action('tracker_confirm', async (ctx) => {
 
     await editMenu(
       ctx,
-      formatHint('📡 Трекер', reason),
+      trackerHint( reason),
       trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
     );
     return;
@@ -2785,7 +2822,7 @@ bot.action('tracker_confirm', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHint('📡 Трекер', `Слежу за ${status.name || steamId}. Уведомления придут в этот чат.`),
+    trackerHint( `Слежу за ${status.name || steamId}. Уведомления придут в этот чат.`),
     trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
   );
 });
@@ -3220,8 +3257,7 @@ bot.on('text', async (ctx) => {
     if (!steamId) {
       await editMenu(
         ctx,
-        formatHint(
-          '📡 Трекер',
+        trackerHint(
           'Не нашёл такой профиль. Отправь ссылку steamcommunity.com/profiles/… или SteamID64.'
         ),
         trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
@@ -3232,7 +3268,7 @@ bot.on('text', async (ctx) => {
     if (tracker.listProfiles(ctx.from.id).some((profile) => profile.steamId === steamId)) {
       await editMenu(
         ctx,
-        formatHint('📡 Трекер', 'Этот профиль уже в списке.'),
+        trackerHint( 'Этот профиль уже в списке.'),
         trackerProfileKeyboard(steamId)
       );
       return;
@@ -3258,7 +3294,7 @@ bot.on('text', async (ctx) => {
 
       await editMenu(
         ctx,
-        formatHint('📡 Трекер', reason),
+        trackerHint( reason),
         trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
       );
       return;
