@@ -1150,7 +1150,9 @@ async function screenshotPhoneFriend(html, data) {
     }
 
     if (data.avatarUrl) {
-      payload.user_pic = String(data.avatarUrl);
+      payload.user_pic = await inlineAvatar(data.avatarUrl);
+    } else {
+      console.warn(`phone friend: no avatar parsed for ${data.sentUrl || '?'}, the baked default stays`);
     }
 
     if (data.friendCode) {
@@ -1169,6 +1171,21 @@ async function screenshotPhoneFriend(html, data) {
     if (rendered !== true) {
       throw new Error(String(rendered));
     }
+
+    // Аватар приходит с внешнего CDN и грузится асинхронно: без этого ожидания в кадр попадает
+    // дефолтная картинка, запечённая в шаблон, и выглядит это как «аватар не меняется».
+    await page.evaluate(() =>
+      Promise.all(
+        Array.from(document.images).map((img) =>
+          img.complete
+            ? true
+            : new Promise((resolve) => {
+                img.onload = resolve;
+                img.onerror = resolve;
+              })
+        )
+      )
+    );
 
     // One frame so the avatar and the scaled frame are painted before the element screenshot.
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true))));
@@ -1318,8 +1335,7 @@ function isCs2Template(templateName) {
 // The CS2 templates hand the avatar to an <img> inside the page. Steam's CDN answers without CORS
 // headers, and a canvas that has drawn such an image cannot be exported — so the bytes are fetched
 // here and passed in as a data URL. The screen then renders the same way with or without the CDN.
-async function fetchImageDataUrl(url) {
-  if (!url || !/^https?:/i.test(url)) {
+async function fetchImageDataUrl(url) {  if (!url || !/^https?:/i.test(url)) {
     return '';
   }
 
@@ -1355,6 +1371,44 @@ async function loadCs2Profile(url) {
     avatarUrl: data.avatarUrl || '',
     sentUrl: url
   };
+}
+
+// Аватар в телефонный шаблон и в QR уходит data-URL'ом: если из контейнера CDN Steam не открывается,
+// картинка не грузится, <img> остаётся пустым — и под ним проступает дефолтная аватарка, запечённая в
+// шаблон. Внешне это выглядит как «аватар не меняется». Свои байты снимают зависимость от CDN.
+// Если забрать не удалось, отдаём исходный URL: пусть попробует сам браузер.
+const avatarDataCache = new Map();
+const AVATAR_CACHE_LIMIT = 50;
+
+async function inlineAvatar(url) {
+  const value = String(url || '');
+
+  if (!/^https?:/i.test(value)) {
+    return value;
+  }
+
+  const cached = avatarDataCache.get(value);
+
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const dataUrl = await fetchImageDataUrl(value);
+
+    if (dataUrl) {
+      if (avatarDataCache.size >= AVATAR_CACHE_LIMIT) {
+        avatarDataCache.delete(avatarDataCache.keys().next().value);
+      }
+
+      avatarDataCache.set(value, dataUrl);
+      return dataUrl;
+    }
+  } catch (error) {
+    console.warn(`avatar inline failed (${error.message}), leaving the remote url`);
+  }
+
+  return value;
 }
 
 async function renderCs2Screenshot({ templateName, payload }) {
@@ -1578,12 +1632,13 @@ async function processQrFriendRequest(url) {
   const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 530, errorCorrectionLevel: 'M' });
 
   const template = await loadTemplate(config.TEMPLATES.QR_FRIEND);
+  const avatar = await inlineAvatar(pageData.avatarUrl || '');
 
   const html = template.html
     .split('{{user_nick}}')
     .join(escapeHtml(pageData.profileName || 'Steam User'))
     .split('{{user_pic}}')
-    .join(escapeHtml(pageData.avatarUrl || ''))
+    .join(escapeHtml(avatar))
     .split('{{qr_code}}')
     .join(qrDataUrl)
     .split('{{invite_link}}')
@@ -1691,7 +1746,7 @@ const ADD_ERROR_PHONE_VIEWPORT = { width: 851, height: 1849 };
 async function renderAddErrorPhone(pageData, code, url) {
   const template = await loadTemplate(config.TEMPLATES.ADD_ERROR_PHONE);
   const nick = escapeHtml(pageData.profileName || 'Steam User');
-  const avatar = escapeHtml(pageData.avatarUrl || '');
+  const avatar = escapeHtml(await inlineAvatar(pageData.avatarUrl || ''));
 
   const html = template.html
     .split('{{user_nick}}')
@@ -4014,7 +4069,10 @@ async function main() {
 process.once('SIGINT', () => shutdown('SIGINT'));
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 
-main().catch(err => {
-  console.error('Failed to start bot:', err);
-  process.exit(1);
-});
+if (process.env.SKIP_MAIN !== '1') {
+  main().catch(err => {
+    console.error('Failed to start bot:', err);
+    process.exit(1);
+  });
+}
+
