@@ -98,7 +98,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'cs2-text-v11';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'add-error-pair-v12';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');
@@ -1773,24 +1773,29 @@ async function processSteamNoticeRequest(link) {
 // operator — the same code that "failed" to send an invitation.
 const ADD_ERROR_PHONE_VIEWPORT = { width: 851, height: 1849 };
 
-async function renderAddErrorPhone(pageData, code, url) {
+// Телефонная ошибка добавления собирается из двух профилей: верх страницы (обе верхние аватарки и
+// ник) — с фейка, то есть «мы залогинены»; карточка друга и её ник — с профиля кита; ссылка внизу —
+// снова фейк, потому что именно её отправляли.
+async function renderAddErrorPhone(kitPage, fakePage, code) {
   const template = await loadTemplate(config.TEMPLATES.ADD_ERROR_PHONE);
-  const nick = escapeHtml(pageData.profileName || 'Steam User');
-  const avatar = escapeHtml(await inlineAvatar(pageData.avatarUrl || ''));
+  const userNick = escapeHtml(fakePage.profileName || 'Steam User');
+  const userPic = escapeHtml(await inlineAvatar(fakePage.avatarUrl || ''));
+  const friendNick = escapeHtml(kitPage.profileName || 'Steam User');
+  const friendPic = escapeHtml(await inlineAvatar(kitPage.avatarUrl || ''));
 
   const html = template.html
     .split('{{user_nick}}')
-    .join(nick)
+    .join(userNick)
     .split('{{friend_nick}}')
-    .join(nick)
+    .join(friendNick)
     .split('{{user_pic}}')
-    .join(avatar)
+    .join(userPic)
     .split('{{friend_pic}}')
-    .join(avatar)
+    .join(friendPic)
     .split('{{input_code}}')
     .join(escapeHtml(code))
     .split('{{invite_link}}')
-    .join(escapeHtml(url));
+    .join(escapeHtml(fakePage.sentUrl || ''));
 
   const page = await browserPool.getPage();
 
@@ -1825,20 +1830,22 @@ async function renderAddErrorPhone(pageData, code, url) {
   }
 }
 
-async function processAddErrorPhone(pageData, code, url) {
-  const cacheKey = screenshotCache.generateKey(url, `${config.TEMPLATES.ADD_ERROR_PHONE}:${code}`, {
-    renderVersion: SCREENSHOT_CACHE_VERSION
-  });
+async function processAddErrorPhone(kitPage, fakePage, code) {
+  const cacheKey = screenshotCache.generateKey(
+    `${fakePage.sentUrl || ''}|${kitPage.sentUrl || ''}`,
+    `${config.TEMPLATES.ADD_ERROR_PHONE}:${code}`,
+    { renderVersion: SCREENSHOT_CACHE_VERSION }
+  );
   const cached = screenshotCache.get(cacheKey);
 
   if (cached) {
     return cached;
   }
 
-  const imageBuffer = await renderAddErrorPhone(pageData, code, url);
+  const imageBuffer = await renderAddErrorPhone(kitPage, fakePage, code);
 
   screenshotCache.set(cacheKey, imageBuffer);
-  console.log(`Screenshot created for ${config.TEMPLATES.ADD_ERROR_PHONE}: ${url}`);
+  console.log(`Screenshot created for ${config.TEMPLATES.ADD_ERROR_PHONE}: ${kitPage.sentUrl}`);
 
   return imageBuffer;
 }
@@ -2535,14 +2542,16 @@ async function selectAddErrorMode(ctx, mode) {
   state.template = config.TEMPLATES.ADD_ERROR;
   state.addErrorMode = mode;
   state.addErrorData = null;
-  state.status = 'waiting_link';
+  state.addErrorFake = null;
+  // Телефон начинается с фейка: он даёт верхнюю «залогиненную» часть страницы.
+  state.status = mode === 'phone' ? 'waiting_add_error_fake' : 'waiting_link';
   userState.set(ctx.from.id, state);
 
   await replaceMenu(
     ctx,
     formatTemplateHint(
       config.TEMPLATES.ADD_ERROR,
-      'Отправь ссылку на профиль кита.',
+      mode === 'phone' ? 'Отправь ссылку на фейк.' : 'Отправь ссылку на профиль кита.',
       mode
     ),
     waitingKeyboard(config.TEMPLATES.ADD_ERROR)
@@ -3506,7 +3515,7 @@ bot.on('text', async (ctx) => {
 
       const taskId = `${ctx.from.id}_add_error_code_${Date.now()}`;
       const imageBuffer = await requestQueue.add(taskId, () =>
-        processAddErrorPhone(state.addErrorData, code, state.addErrorData.sentUrl || '')
+        processAddErrorPhone(state.addErrorData, state.addErrorFake || {}, code)
       );
 
       await deleteProgressMessage(ctx, progressMessage);
@@ -3910,6 +3919,58 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  // Телефон: сначала фейк (верх страницы), потом профиль кита, потом его код.
+  if (state.status === 'waiting_add_error_fake') {
+    try {
+      await assertPublicHttpUrl(url);
+    } catch {
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Отправь корректную http/https ссылку.'),
+        waitingKeyboard(state.template)
+      );
+      return;
+    }
+
+    let progressMessage;
+
+    try {
+      state.status = 'processing_add_error_fake';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(ctx, 'Читаю профиль…');
+
+      const taskId = `${ctx.from.id}_add_error_fake_${Date.now()}`;
+      const fakeData = await requestQueue.add(taskId, () => loadFriendPageData(url));
+
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.addErrorFake = fakeData;
+      state.status = 'waiting_add_error_kit';
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(
+        ctx,
+        formatStateHint(state, 'Теперь ссылку на профиль кита.'),
+        waitingKeyboard(state.template)
+      );
+    } catch (error) {
+      console.error('Add-error fake link error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_add_error_fake';
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Не удалось прочитать профиль. Отправь ссылку ещё раз.'),
+        errorKeyboard(state.template)
+      );
+    }
+
+    return;
+  }
+
   if (
     state.template === config.TEMPLATES.ADD_ERROR &&
     !['profile', 'friendlink', 'phone'].includes(state.addErrorMode)
@@ -3940,7 +4001,11 @@ bot.on('text', async (ctx) => {
     );
   }
 
-  if (state.template === config.TEMPLATES.ADD_ERROR && state.addErrorMode === 'phone') {
+  if (
+    state.template === config.TEMPLATES.ADD_ERROR &&
+    state.addErrorMode === 'phone' &&
+    state.status === 'waiting_add_error_kit'
+  ) {
     let progressMessage;
 
     try {
@@ -3960,14 +4025,14 @@ bot.on('text', async (ctx) => {
 
       await replaceMenu(
         ctx,
-        formatStateHint(state, 'Отправь френд-код, который не приняли.'),
+        formatStateHint(state, 'Отправь френд-код кита, который не приняли.'),
         waitingKeyboard(state.template)
       );
     } catch (error) {
       console.error('Add-error phone link error:', error);
       await deleteProgressMessage(ctx, progressMessage);
 
-      state.status = 'waiting_link';
+      state.status = 'waiting_add_error_kit';
       state.addErrorData = null;
       userState.set(ctx.from.id, state);
 
