@@ -181,7 +181,7 @@ function drawNick(nickname) {
   ctx.translate(p.x,p.y);ctx.scale(.90,1);
   ctx.drawImage(layer,-layer.width/2,-layer.height/2);
   ctx.restore();
-  paintPrime(p.x - Math.min(c.measureText(nickname).width, p.maxWidth) * .90 / 2 - 5, p.y, 17);
+  paintPrime(p.x - Math.min(c.measureText(nickname).width, p.maxWidth) * .90 / 2 - 2, p.y - 4, 21);
 }
 function draw() {
   ctx.clearRect(0,0,W,H);
