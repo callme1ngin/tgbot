@@ -98,7 +98,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'add-error-header-v16';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'add-error-header-v17';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');
@@ -910,30 +910,57 @@ function buildAddFriendErrorDialog(profileName) {
   return `<dialog class="newmodal add_friend_error_modal" data-panel="{&quot;onCancelButton&quot;:&quot;CModal.DismissActiveModal()&quot;}" open=""><div class="modal_top_bar"></div><div class="newmodal_header_border"><div class="newmodal_header"><div class="newmodal_close" data-panel="{&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}"></div><div class="title_text">Add Friend - ${titleName}</div></div></div><div class="newmodal_content_border"><div class="newmodal_content" style="max-height: 803px;"><div>Couldn't send invitation. Please, try again later.</div><div class="newmodal_buttons" data-panel="{&quot;flow-children&quot;:&quot;row&quot;}"><div class="btn_grey_steamui btn_medium" data-panel="{&quot;autoFocus&quot;:true,&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}"><span>OK</span></div></div></div></div></dialog>`;
 }
 
-// Шапка «мы в аккаунте» для страниц ошибки добавления: аватар и ник берутся с фейк-ссылки.
+// Шапка «мы в аккаунте» для страниц ошибки добавления.
 //
-// Живёт в iframe: страница кита грузит свою таблицу стилей Steam, и любые наши классы она перебивает —
-// проверено, правила с !important бьют даже инлайн-стили. {srcdoc} изолирует шапку полностью, в обе
-// стороны: её стили не текут на страницу, стили страницы — на неё.
+// Ничего своего: берём шаблон страницы друга целиком и показываем его верхние 104 px в iframe. Так
+// шапка совпадает с ним до пикселя — та же разметка, тот же CSS, тот же JS, который включает зелёную
+// кнопку Install и рисует колокольчик. Iframe изолирует её от стилей страницы кита (правила с
+// !important бьют даже инлайн-стили — проверено).
+const FRIEND_HEADER_HEIGHT = 104;
+let friendHeaderTemplate;
+
+async function loadFriendHeaderTemplate() {
+  if (friendHeaderTemplate !== undefined) {
+    return friendHeaderTemplate;
+  }
+
+  try {
+    friendHeaderTemplate = await fs.readFile(
+      path.join(PROJECT_ROOT, 'templates', `${config.TEMPLATES.FRIEND}.html`),
+      'utf8'
+    );
+  } catch (error) {
+    friendHeaderTemplate = '';
+    console.warn(`friend header template is unavailable: ${error.message}`);
+  }
+
+  return friendHeaderTemplate;
+}
+
 async function buildAddErrorHeader(ownPageData) {
   if (!ownPageData || (!ownPageData.profileName && !ownPageData.avatarUrl)) {
     return '';
   }
 
-  const fragment = await loadFragment('add-error-header.html');
+  const template = await loadFriendHeaderTemplate();
+
+  if (!template) {
+    return '';
+  }
+
   const nick = escapeHtml(ownPageData.profileName || 'Steam User');
   const pic = escapeHtml(await inlineAvatar(ownPageData.avatarUrl || ''));
 
-  const doc = fragment.split('{{own_nick}}').join(nick).split('{{own_pic}}').join(pic);
-  // Внутри srcdoc экранируем не только кавычки: иначе последующие вставки по строке (диалог перед
-  // </body>) попадают внутрь документа шапки и ломают её.
+  const doc = template.split('{{PROFILE_NAME}}').join(nick).split('{{AVATAR_URL}}').join(pic);
+
+  // Внутри srcdoc экранируем разметку целиком: иначе последующие вставки по строке попадут внутрь.
   const srcdoc = doc
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  return `<iframe id="aeHeader" title="Steam" scrolling="no" srcdoc="${srcdoc}" style="display:block;width:100%;height:104px;border:0;margin:0;padding:0;position:relative;z-index:5;background:#171a21"></iframe>`;
+  return `<iframe id="aeHeader" title="Steam" scrolling="no" srcdoc="${srcdoc}" style="display:block;width:100%;height:${FRIEND_HEADER_HEIGHT}px;border:0;margin:0;padding:0;position:relative;z-index:5;background:#171a21"></iframe>`;
 }
 
 function injectAddFriendErrorContent(html, finalUrl, actionsFragment, inviteBannerFragment = '', headerHtml = '') {
