@@ -143,7 +143,7 @@ function drawNick(nickname) {
   const sz=fontFit(nickname,p.size,p.maxWidth,state.stratum,10);
   c.textAlign='center';c.textBaseline='middle';
   c.font=`600 ${sz}px ${state.stratum}`;
-  c.letterSpacing='-0.5px';
+  c.letterSpacing='-0.65px';
   c.fillStyle='rgba(228,227,224,.92)';
   c.shadowColor='rgba(0,0,0,.38)';c.shadowBlur=1;
   c.fillText(nickname,layer.width/2,layer.height/2,p.maxWidth);
@@ -159,7 +159,7 @@ function drawNick(nickname) {
   }
   c.putImageData(frame,0,0);
   ctx.save();ctx.filter='blur(.32px)';
-  ctx.translate(p.x,p.y);ctx.scale(.95,1);
+  ctx.translate(p.x,p.y);ctx.scale(.90,1);
   ctx.drawImage(layer,-layer.width/2,-layer.height/2);
   ctx.restore();
 }
