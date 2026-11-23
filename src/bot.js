@@ -2496,9 +2496,8 @@ async function selectTemplate(ctx, templateName) {
     return;
   }
 
-  await editMenu(ctx, menuText, waitingKeyboard(templateName));
+  await replaceMenu(ctx, menuText, waitingKeyboard(templateName));
 }
-
 async function selectAddErrorMode(ctx, mode) {
   const state = getUserState(ctx);
   await ctx.answerCbQuery();
@@ -2509,14 +2508,14 @@ async function selectAddErrorMode(ctx, mode) {
   state.status = 'waiting_link';
   userState.set(ctx.from.id, state);
 
-  await editMenu(
+  await replaceMenu(
     ctx,
     formatTemplateHint(
       config.TEMPLATES.ADD_ERROR,
       'Отправь ссылку на профиль кита.',
       mode
     ),
-    addErrorModeKeyboard()
+    waitingKeyboard(config.TEMPLATES.ADD_ERROR)
   );
 }
 
@@ -2734,7 +2733,7 @@ bot.action('again', async (ctx) => {
 
     state.status = 'waiting_qr_link';
     userState.set(ctx.from.id, state);
-    await editMenu(
+    await replaceMenu(
       ctx,
       formatTemplateHint(template, 'Отправь ссылку на фейк.'),
       waitingKeyboard(template)
@@ -2801,7 +2800,7 @@ bot.action('qr_friend', async (ctx) => {
   state.addErrorData = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(
+  await replaceMenu(
     ctx,
     formatTemplateHint(config.TEMPLATES.QR_FRIEND, 'Отправь ссылку на фейк.'),
     waitingKeyboard(config.TEMPLATES.QR_FRIEND)
@@ -2818,7 +2817,7 @@ async function showSteamNoticePrompt(ctx, templateName) {
   state.addErrorData = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(
+  await replaceMenu(
     ctx,
     formatTemplateHint(templateName, 'Отправь френдлинк кита — встанет в адрес и в уведомление.'),
     waitingKeyboard(templateName)
@@ -2842,7 +2841,7 @@ async function startCs2Flow(ctx, templateName) {
   state.cs2Profile = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(
+  await replaceMenu(
     ctx,
     formatTemplateHint(templateName, 'Отправь ссылку на фэйк.'),
     waitingKeyboard(templateName)
@@ -2873,7 +2872,7 @@ async function startDotaFlow(ctx, templateName) {
   state.status = 'waiting_dota_code';
   userState.set(ctx.from.id, state);
 
-  await editMenu(
+  await replaceMenu(
     ctx,
     formatTemplateHint(templateName, 'Отправь френд-код друга.'),
     waitingKeyboard(templateName)
@@ -2991,10 +2990,10 @@ bot.action('tracker_add', async (ctx) => {
   state.trackerCandidate = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(
+  await replaceMenu(
     ctx,
-    trackerHint( 'Отправь ссылку на профиль Steam или SteamID64.'),
-    trackerKeyboard(tracker.notifyEnabled(ctx.from.id))
+    trackerHint('Отправь ссылку на профиль Steam или SteamID64.'),
+    { inline_keyboard: [[b('✖️ Отмена', 'tracker_menu')]] }
   );
 });
 
