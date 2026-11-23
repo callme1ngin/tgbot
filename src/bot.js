@@ -98,7 +98,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'cs2-font-v1';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'cs2-stratum2-v2';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');
@@ -134,9 +134,9 @@ const photoAssets = {
   }
 };
 
-// Шрифт для CS2-экранов. Шаблоны ждут Stratum2 — шрифт клиента Steam, в Linux его нет, поэтому рисуем
-// PT Sans Narrow: свободный, метрически близкий, с кириллицей. Появится лицензионный Stratum2 — хватит
-// положить файл и указать путь: CS2_FONT_PATH=/app/assets/stratum2.ttf.
+// Шрифт для CS2-экранов. Шаблоны ждут Stratum2 — шрифт клиента Steam, в Linux его нет, поэтому в
+// assets лежит Stratum2 Regular (тот же файл, что в chromotion). Заменить — положить другой файл и
+// указать путь: CS2_FONT_PATH=/app/assets/stratum2.ttf.
 const CS2_FONT_PATH = process.env.CS2_FONT_PATH || path.join(PROJECT_ROOT, 'assets', 'cs2_font.ttf');
 let cs2FontDataUrl;
 
