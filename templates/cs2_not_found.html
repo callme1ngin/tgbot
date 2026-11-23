@@ -146,7 +146,7 @@ function drawNick(nickname) {
   c.fillStyle='rgba(246,245,243,.96)';
   c.shadowColor='rgba(0,0,0,.38)';c.shadowBlur=1;
   c.fillText(nickname,layer.width/2,layer.height/2,p.maxWidth);
-  c.lineWidth=.9;c.strokeStyle='rgba(246,245,243,.96)';
+  c.lineWidth=.55;c.strokeStyle='rgba(246,245,243,.96)';
   c.strokeText(nickname,layer.width/2,layer.height/2,p.maxWidth);
   const frame=c.getImageData(0,0,layer.width,layer.height);
   for(let i=0;i<frame.data.length;i+=4) {
@@ -157,7 +157,7 @@ function drawNick(nickname) {
     frame.data[i+3]=Math.round(frame.data[i+3]*(.95+.05*t));
   }
   c.putImageData(frame,0,0);
-  ctx.save();ctx.filter='blur(.15px)';
+  ctx.save();ctx.filter='blur(.32px)';
   ctx.drawImage(layer,p.x-layer.width/2,p.y-layer.height/2);
   ctx.restore();
 }
