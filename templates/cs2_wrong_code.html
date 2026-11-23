@@ -122,7 +122,7 @@
     let size=16;
     const setFont=() => {
       // Stratum2 Regular, NOT Bold/Semibold as in old revision.
-      t.font=`500 ${size}px ${state.fontFamily}`;
+      t.font=`600 ${size}px ${state.fontFamily}`;
     };
     setFont();
     while (t.measureText(text).width > NAME.maxWidth && size > 10) {
@@ -135,6 +135,9 @@
     t.shadowColor='rgba(0,0,0,.38)';
     t.shadowBlur=1;
     t.fillText(text,tmp.width/2,tmp.height/2, NAME.maxWidth);
+    t.lineWidth=.9;
+    t.strokeStyle='rgba(246,245,243,.96)';
+    t.strokeText(text,tmp.width/2,tmp.height/2, NAME.maxWidth);
     t.shadowBlur=0;
     // A tiny amount of stable pixel-level noise to mimic source screenshot texture.
     const pixels=t.getImageData(0,0,tmp.width,tmp.height);

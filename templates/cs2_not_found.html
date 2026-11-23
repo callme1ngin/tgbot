@@ -142,10 +142,12 @@ function drawNick(nickname) {
   const c=layer.getContext('2d',{willReadFrequently:true});
   const sz=fontFit(nickname,p.size,p.maxWidth,state.stratum,10);
   c.textAlign='center';c.textBaseline='middle';
-  c.font=`500 ${sz}px ${state.stratum}`;
+  c.font=`600 ${sz}px ${state.stratum}`;
   c.fillStyle='rgba(246,245,243,.96)';
   c.shadowColor='rgba(0,0,0,.38)';c.shadowBlur=1;
   c.fillText(nickname,layer.width/2,layer.height/2,p.maxWidth);
+  c.lineWidth=.9;c.strokeStyle='rgba(246,245,243,.96)';
+  c.strokeText(nickname,layer.width/2,layer.height/2,p.maxWidth);
   const frame=c.getImageData(0,0,layer.width,layer.height);
   for(let i=0;i<frame.data.length;i+=4) {
     if(frame.data[i+3]===0)continue;
