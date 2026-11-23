@@ -98,7 +98,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'add-error-pair-v12';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'add-error-header-v13';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');
@@ -910,7 +910,20 @@ function buildAddFriendErrorDialog(profileName) {
   return `<dialog class="newmodal add_friend_error_modal" data-panel="{&quot;onCancelButton&quot;:&quot;CModal.DismissActiveModal()&quot;}" open=""><div class="modal_top_bar"></div><div class="newmodal_header_border"><div class="newmodal_header"><div class="newmodal_close" data-panel="{&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}"></div><div class="title_text">Add Friend - ${titleName}</div></div></div><div class="newmodal_content_border"><div class="newmodal_content" style="max-height: 803px;"><div>Couldn't send invitation. Please, try again later.</div><div class="newmodal_buttons" data-panel="{&quot;flow-children&quot;:&quot;row&quot;}"><div class="btn_grey_steamui btn_medium" data-panel="{&quot;autoFocus&quot;:true,&quot;focusable&quot;:true,&quot;clickOnActivate&quot;:true}"><span>OK</span></div></div></div></div></dialog>`;
 }
 
-function injectAddFriendErrorContent(html, finalUrl, actionsFragment, inviteBannerFragment = '') {
+// Шапка «мы в аккаунте» для страниц ошибки добавления: аватар и ник берутся с фейк-ссылки.
+async function buildAddErrorHeader(ownPageData) {
+  if (!ownPageData || (!ownPageData.profileName && !ownPageData.avatarUrl)) {
+    return '';
+  }
+
+  const fragment = await loadFragment('add-error-header.html');
+  const nick = escapeHtml(ownPageData.profileName || 'Steam User');
+  const pic = escapeHtml(await inlineAvatar(ownPageData.avatarUrl || ''));
+
+  return fragment.split('{{own_nick}}').join(nick).split('{{own_pic}}').join(pic);
+}
+
+function injectAddFriendErrorContent(html, finalUrl, actionsFragment, inviteBannerFragment = '', headerHtml = '') {
   const htmlWithBase = ensureBaseHrefValue(html, finalUrl);
   const root = parse(htmlWithBase);
   const profileName = getSteamProfileName(root, html);
@@ -930,6 +943,23 @@ function injectAddFriendErrorContent(html, finalUrl, actionsFragment, inviteBann
     result = root.toString();
   } else if (nextActions) {
     result = injectBeforeBody(result, nextActions.toString());
+  }
+
+  // Своя шапка встаёт первой в body, а родная шапка страницы кита убирается: иначе их две.
+  if (headerHtml) {
+    result = result.replace(/<body([^>]*)>/i, (match) => `${match}${headerHtml}`);
+
+    if (result === html) {
+      result = headerHtml + result;
+    }
+
+    result = injectBeforeHeadEnd(
+      result,
+      '<style>#global_header:not(#aeHeader),.responsive_page_frame>#global_header{display:none!important}</style>'
+    );
+
+    // Страница не должна подтягивать свою шапку скриптом.
+    result = result.replace(/<body([^>]*)>/i, (match) => `${match}`);
   }
 
   const inviteBannerOffset = inviteBannerFragment ? INVITE_BANNER_MODAL_OFFSET_PX : 0;
@@ -1232,7 +1262,8 @@ async function processRequest(url, templateName, options = {}) {
   const cacheKey = screenshotCache.generateKey(url, templateName, {
     renderVersion: SCREENSHOT_CACHE_VERSION,
     selectors: config.SELECTORS,
-    addErrorMode: options.addErrorMode || ''
+    addErrorMode: options.addErrorMode || '',
+    ownUrl: options.ownPageData?.sentUrl || ''
   });
   const cachedResult = screenshotCache.get(cacheKey);
 
@@ -1250,13 +1281,20 @@ async function processRequest(url, templateName, options = {}) {
     const inviteBannerFragment = options.addErrorMode === 'friendlink'
       ? await loadFragment('add-friend-invite-banner.html')
       : '';
+    const headerHtml = await buildAddErrorHeader(options.ownPageData);
     pageData = {
       title: '🫂Ошибка добавления',
       description: finalUrl,
       profileUrl: finalUrl,
       sentUrl: url
     };
-    finalHtml = injectAddFriendErrorContent(originalHtml, finalUrl, actionsFragment, inviteBannerFragment);
+    finalHtml = injectAddFriendErrorContent(
+      originalHtml,
+      finalUrl,
+      actionsFragment,
+      inviteBannerFragment,
+      headerHtml
+    );
   } else {
     const template = await loadTemplate(templateName);
 
@@ -1848,6 +1886,49 @@ async function processAddErrorPhone(kitPage, fakePage, code) {
   console.log(`Screenshot created for ${config.TEMPLATES.ADD_ERROR_PHONE}: ${kitPage.sentUrl}`);
 
   return imageBuffer;
+}
+
+// Профиль и френдлинк: страница кита плюс наша шапка, снятая с фейк-ссылки.
+async function renderAddErrorPage(ctx, state) {
+  const kit = state.addErrorData;
+  let progressMessage;
+
+  try {
+    state.status = 'processing_add_error_page';
+    userState.set(ctx.from.id, state);
+
+    progressMessage = await sendProgressMessage(ctx, 'Собираю страницу…');
+
+    const taskId = `${ctx.from.id}_add_error_page_${Date.now()}`;
+    const { imageBuffer } = await requestQueue.add(taskId, () =>
+      processRequest(kit.sentUrl, config.TEMPLATES.ADD_ERROR, {
+        addErrorMode: state.addErrorMode,
+        ownPageData: state.addErrorFake
+      })
+    );
+
+    await deleteProgressMessage(ctx, progressMessage);
+
+    state.status = 'waiting_add_error_fake';
+    userState.set(ctx.from.id, state);
+
+    await sendResult(ctx, imageBuffer, {
+      label: screenTitle(state.template, state.addErrorMode),
+      keyboard: resultTemplateKeyboard(state.template)
+    });
+  } catch (error) {
+    console.error('Add-error page error:', error);
+    await deleteProgressMessage(ctx, progressMessage);
+
+    state.status = 'waiting_add_error_fake';
+    userState.set(ctx.from.id, state);
+
+    await editMenu(
+      ctx,
+      formatStateHint(state, 'Не удалось собрать страницу. Отправь ссылку ещё раз.'),
+      errorKeyboard(state.template)
+    );
+  }
 }
 
 // Кнопка: текст и данные, вид (иконка, цвет) приходит из data/ui.json по callback_data.
@@ -2544,7 +2625,7 @@ async function selectAddErrorMode(ctx, mode) {
   state.addErrorData = null;
   state.addErrorFake = null;
   // Телефон начинается с фейка: он даёт верхнюю «залогиненную» часть страницы.
-  state.status = mode === 'phone' ? 'waiting_add_error_fake' : 'waiting_link';
+  state.status = mode === 'phone' ? 'waiting_add_error_fake' : 'waiting_add_error_kit';
   userState.set(ctx.from.id, state);
 
   await replaceMenu(
@@ -3919,7 +4000,8 @@ bot.on('text', async (ctx) => {
     return;
   }
 
-  // Телефон: сначала фейк (верх страницы), потом профиль кита, потом его код.
+  // Фейк нужен в двух местах: телефону — первым (он даёт верх страницы), профилю и френдлинку —
+  // вторым (там он даёт шапку «мы в аккаунте»).
   if (state.status === 'waiting_add_error_fake') {
     try {
       await assertPublicHttpUrl(url);
@@ -3946,19 +4028,94 @@ bot.on('text', async (ctx) => {
       await deleteProgressMessage(ctx, progressMessage);
 
       state.addErrorFake = fakeData;
-      state.status = 'waiting_add_error_kit';
       userState.set(ctx.from.id, state);
 
-      await replaceMenu(
-        ctx,
-        formatStateHint(state, 'Теперь ссылку на профиль кита.'),
-        waitingKeyboard(state.template)
-      );
+      // Кит ещё не прислан — значит это телефон, идём дальше по его цепочке.
+      if (!state.addErrorData) {
+        state.status = 'waiting_add_error_kit';
+        userState.set(ctx.from.id, state);
+
+        await replaceMenu(
+          ctx,
+          formatStateHint(state, 'Теперь ссылку на профиль кита.'),
+          waitingKeyboard(state.template)
+        );
+        return;
+      }
+
+      // Кит уже прочитан: профиль и френдлинк собираются сразу.
+      await renderAddErrorPage(ctx, state);
     } catch (error) {
       console.error('Add-error fake link error:', error);
       await deleteProgressMessage(ctx, progressMessage);
 
       state.status = 'waiting_add_error_fake';
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Не удалось прочитать профиль. Отправь ссылку ещё раз.'),
+        errorKeyboard(state.template)
+      );
+    }
+
+    return;
+  }
+
+  // Кит: для телефона это второй шаг, для профиля и френдлинка — первый.
+  if (state.status === 'waiting_add_error_kit') {
+    try {
+      await assertPublicHttpUrl(url);
+    } catch {
+      await editMenu(
+        ctx,
+        formatStateHint(state, 'Отправь корректную http/https ссылку.'),
+        waitingKeyboard(state.template)
+      );
+      return;
+    }
+
+    let progressMessage;
+
+    try {
+      state.status = 'processing_add_error_kit';
+      userState.set(ctx.from.id, state);
+
+      progressMessage = await sendProgressMessage(ctx, 'Читаю профиль…');
+
+      const taskId = `${ctx.from.id}_add_error_kit_${Date.now()}`;
+      const kitData = await requestQueue.add(taskId, () => loadFriendPageData(url));
+
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.addErrorData = kitData;
+      userState.set(ctx.from.id, state);
+
+      if (state.addErrorMode === 'phone') {
+        state.status = 'waiting_add_error_code';
+        userState.set(ctx.from.id, state);
+
+        await replaceMenu(
+          ctx,
+          formatStateHint(state, 'Отправь френд-код кита, который не приняли.'),
+          waitingKeyboard(state.template)
+        );
+        return;
+      }
+
+      state.status = 'waiting_add_error_fake';
+      userState.set(ctx.from.id, state);
+
+      await replaceMenu(
+        ctx,
+        formatStateHint(state, 'Теперь ссылку на фейк — с него возьму шапку аккаунта.'),
+        waitingKeyboard(state.template)
+      );
+    } catch (error) {
+      console.error('Add-error kit link error:', error);
+      await deleteProgressMessage(ctx, progressMessage);
+
+      state.status = 'waiting_add_error_kit';
       userState.set(ctx.from.id, state);
 
       await editMenu(
@@ -3999,51 +4156,6 @@ bot.on('text', async (ctx) => {
       formatStateHint(state, 'Отправь корректную http/https ссылку.'),
       waitingKeyboard(state.template)
     );
-  }
-
-  if (
-    state.template === config.TEMPLATES.ADD_ERROR &&
-    state.addErrorMode === 'phone' &&
-    state.status === 'waiting_add_error_kit'
-  ) {
-    let progressMessage;
-
-    try {
-      state.status = 'processing_add_error_link';
-      userState.set(ctx.from.id, state);
-
-      progressMessage = await sendProgressMessage(ctx, 'Читаю профиль…');
-
-      const taskId = `${ctx.from.id}_add_error_link_${Date.now()}`;
-      const pageData = await requestQueue.add(taskId, () => loadFriendPageData(url));
-
-      await deleteProgressMessage(ctx, progressMessage);
-
-      state.status = 'waiting_add_error_code';
-      state.addErrorData = pageData;
-      userState.set(ctx.from.id, state);
-
-      await replaceMenu(
-        ctx,
-        formatStateHint(state, 'Отправь френд-код кита, который не приняли.'),
-        waitingKeyboard(state.template)
-      );
-    } catch (error) {
-      console.error('Add-error phone link error:', error);
-      await deleteProgressMessage(ctx, progressMessage);
-
-      state.status = 'waiting_add_error_kit';
-      state.addErrorData = null;
-      userState.set(ctx.from.id, state);
-
-      await editMenu(
-        ctx,
-        formatStateHint(state, 'Не удалось прочитать профиль. Отправь ссылку ещё раз.'),
-        errorKeyboard(state.template)
-      );
-    }
-
-    return;
   }
 
   if (state.template === config.TEMPLATES.STEAM_CHINA) {
