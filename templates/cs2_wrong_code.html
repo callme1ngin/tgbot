@@ -168,11 +168,15 @@
     ctx.save();
     ctx.textAlign='center';
     ctx.textBaseline='middle';
-    ctx.font='500 12px Arial, sans-serif';
-    ctx.fillStyle='rgba(221,221,221,.91)';
-    ctx.shadowColor='rgba(255,255,255,.10)';
-    ctx.shadowBlur=.35;
+    ctx.font=`600 12px ${state.fontFamily}`;
+    ctx.letterSpacing='-0.3px';
+    ctx.fillStyle='rgba(228,227,224,.92)';
+    ctx.shadowColor='rgba(0,0,0,.35)';
+    ctx.shadowBlur=.8;
     ctx.fillText(value, CODE.x, CODE.y);
+    ctx.lineWidth=.2;
+    ctx.strokeStyle='rgba(228,227,224,.92)';
+    ctx.strokeText(value, CODE.x, CODE.y);
     ctx.restore();
   }
 

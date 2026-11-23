@@ -111,12 +111,15 @@ function drawInputCode(code) {
   ctx.save();
   ctx.beginPath();ctx.rect(722,491,205,31);ctx.clip();
   const p=P.input;
-  const sz=fontFit(code,p.size,p.maxWidth,state.noto,12);
-  ctx.font=`400 ${sz}px ${state.noto}`;
+  const sz=fontFit(code,p.size,p.maxWidth,state.stratum,12);
+  ctx.font=`600 ${sz}px ${state.stratum}`;
+  ctx.letterSpacing='-0.3px';
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
-  ctx.fillStyle='rgba(207,207,207,.90)';
-  ctx.shadowColor='rgba(210,210,210,.09)';ctx.shadowBlur=.36;
+  ctx.fillStyle='rgba(228,227,224,.92)';
+  ctx.shadowColor='rgba(0,0,0,.35)';ctx.shadowBlur=.8;
   ctx.fillText(code,p.x,p.y);
+  ctx.lineWidth=.2;ctx.strokeStyle='rgba(228,227,224,.92)';
+  ctx.strokeText(code,p.x,p.y);
   ctx.restore();
 }
 function drawQuotedCode(code) {
@@ -125,12 +128,15 @@ function drawQuotedCode(code) {
   const txt=` '${code}'`;
   const p=P.quotedCode;
   ctx.save();
-  const sz=fontFit(txt,p.size,p.maxWidth,state.noto,10);
-  ctx.font=`400 ${sz}px ${state.noto}`;
+  const sz=fontFit(txt,p.size,p.maxWidth,state.stratum,10);
+  ctx.font=`600 ${sz}px ${state.stratum}`;
+  ctx.letterSpacing='-0.3px';
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
-  ctx.fillStyle='rgba(216,216,214,.92)';
-  ctx.shadowColor='rgba(236,236,235,.08)';ctx.shadowBlur=.25;
+  ctx.fillStyle='rgba(228,227,224,.92)';
+  ctx.shadowColor='rgba(0,0,0,.35)';ctx.shadowBlur=.8;
   ctx.fillText(txt,p.x,p.y);
+  ctx.lineWidth=.2;ctx.strokeStyle='rgba(228,227,224,.92)';
+  ctx.strokeText(txt,p.x,p.y);
   ctx.restore();
 }
 function drawNick(nickname) {
