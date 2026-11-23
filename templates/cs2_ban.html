@@ -77,9 +77,9 @@
     const ink=layer.getContext('2d',{willReadFrequently:true});
     const size=fitNick(text,ink,NAME.maxWidth,NAME.fontSize);
     ink.textAlign='center';ink.textBaseline='middle';
-    ink.font=`600 ${size}px ${fontName}`;
-    ink.fillStyle='rgba(244,243,242,.98)';
-    ink.shadowColor='rgba(242,241,240,.15)';ink.shadowBlur=.5;
+    ink.font=`500 ${size}px ${fontName}`;
+    ink.fillStyle='rgba(246,245,243,.96)';
+    ink.shadowColor='rgba(0,0,0,.38)';ink.shadowBlur=1;
     ink.fillText(text,layer.width/2,layer.height/2,NAME.maxWidth);
     const pixels=ink.getImageData(0,0,layer.width,layer.height);
     for(let i=0;i<pixels.data.length;i+=4){
@@ -90,7 +90,7 @@
     }
     ink.putImageData(pixels,0,0);
     ctx.save();
-    ctx.filter='blur(.22px)';
+    ctx.filter='blur(.15px)';
     // Narrow only the nickname glyphs, keeping their center and height fixed.
     ctx.translate(NAME.x,NAME.y);
     ctx.scale(.79,1);

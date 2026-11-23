@@ -142,9 +142,9 @@ function drawNick(nickname) {
   const c=layer.getContext('2d',{willReadFrequently:true});
   const sz=fontFit(nickname,p.size,p.maxWidth,state.stratum,10);
   c.textAlign='center';c.textBaseline='middle';
-  c.font=`400 ${sz}px ${state.stratum}`;
-  c.fillStyle='rgba(195,194,192,.79)';
-  c.shadowColor='rgba(228,227,225,.12)';c.shadowBlur=.5;
+  c.font=`500 ${sz}px ${state.stratum}`;
+  c.fillStyle='rgba(246,245,243,.96)';
+  c.shadowColor='rgba(0,0,0,.38)';c.shadowBlur=1;
   c.fillText(nickname,layer.width/2,layer.height/2,p.maxWidth);
   const frame=c.getImageData(0,0,layer.width,layer.height);
   for(let i=0;i<frame.data.length;i+=4) {
@@ -155,7 +155,7 @@ function drawNick(nickname) {
     frame.data[i+3]=Math.round(frame.data[i+3]*(.95+.05*t));
   }
   c.putImageData(frame,0,0);
-  ctx.save();ctx.filter='blur(.22px)';
+  ctx.save();ctx.filter='blur(.15px)';
   ctx.drawImage(layer,p.x-layer.width/2,p.y-layer.height/2);
   ctx.restore();
 }

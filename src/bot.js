@@ -98,7 +98,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'cs2-stratum2-v2';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'cs2-nick-v3';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');

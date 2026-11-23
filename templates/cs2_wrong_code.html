@@ -122,7 +122,7 @@
     let size=16;
     const setFont=() => {
       // Stratum2 Regular, NOT Bold/Semibold as in old revision.
-      t.font=`400 ${size}px ${state.fontFamily}`;
+      t.font=`500 ${size}px ${state.fontFamily}`;
     };
     setFont();
     while (t.measureText(text).width > NAME.maxWidth && size > 10) {
@@ -131,9 +131,9 @@
     }
     t.textAlign='center';
     t.textBaseline='middle';
-    t.fillStyle='rgba(190,190,187,.79)';
-    t.shadowColor='rgba(235,235,232,.13)';
-    t.shadowBlur=.5;
+    t.fillStyle='rgba(246,245,243,.96)';
+    t.shadowColor='rgba(0,0,0,.38)';
+    t.shadowBlur=1;
     t.fillText(text,tmp.width/2,tmp.height/2, NAME.maxWidth);
     t.shadowBlur=0;
     // A tiny amount of stable pixel-level noise to mimic source screenshot texture.
@@ -145,7 +145,7 @@
       const py=Math.floor(i/4/tmp.width);
       const r=Math.sin(px*125.127+py*48.123)*43758.5453;
       const n=r-Math.floor(r);
-      d[i+3]=Math.min(255,Math.round(d[i+3]*(.90+.14*n)));
+      d[i+3]=Math.min(255,Math.round(d[i+3]*(.96+.04*n)));
       const delta=Math.round((n-.5)*5);
       d[i]=Math.min(255,Math.max(0,d[i]+delta));
       d[i+1]=Math.min(255,Math.max(0,d[i+1]+delta));
@@ -153,7 +153,7 @@
     }
     t.putImageData(pixels,0,0);
     ctx.save();
-    ctx.filter='blur(.30px)';
+    ctx.filter='blur(.15px)';
     ctx.drawImage(tmp, NAME.x-tmp.width/2, NAME.y-tmp.height/2);
     ctx.restore();
   }
