@@ -1,5 +1,14 @@
 FROM mcr.microsoft.com/playwright:v1.60.0-noble
 
+# Шрифты, которые ждут шаблоны: Arial (в Linux его нет — fontconfig подменяет Liberation Sans,
+# метрически совпадающей), плюс базовый набор для китайских ников и эмодзи.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        fonts-liberation \
+        fonts-dejavu-core \
+        fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY package*.json ./
