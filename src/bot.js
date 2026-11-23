@@ -98,8 +98,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'profile-name-dialog-v1';
-const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'cs2-font-v1';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');
@@ -134,6 +133,29 @@ const photoAssets = {
     fileId: null
   }
 };
+
+// Шрифт для CS2-экранов. Шаблоны ждут Stratum2 — шрифт клиента Steam, в Linux его нет, поэтому рисуем
+// PT Sans Narrow: свободный, метрически близкий, с кириллицей. Появится лицензионный Stratum2 — хватит
+// положить файл и указать путь: CS2_FONT_PATH=/app/assets/stratum2.ttf.
+const CS2_FONT_PATH = process.env.CS2_FONT_PATH || path.join(PROJECT_ROOT, 'assets', 'cs2_font.ttf');
+let cs2FontDataUrl;
+
+async function loadCs2Font() {
+  if (cs2FontDataUrl !== undefined) {
+    return cs2FontDataUrl;
+  }
+
+  try {
+    const bytes = await fs.readFile(CS2_FONT_PATH);
+    cs2FontDataUrl = `data:font/ttf;base64,${bytes.toString('base64')}`;
+    console.log(`CS2 font: ${path.basename(CS2_FONT_PATH)} (${bytes.length} bytes)`);
+  } catch (error) {
+    cs2FontDataUrl = '';
+    console.warn(`CS2 font is unavailable (${path.basename(CS2_FONT_PATH)}): ${error.message}`);
+  }
+
+  return cs2FontDataUrl;
+}
 
 async function loadTemplate(templateName) {
   const templatePath = await resolveTemplatePath(templateName);
@@ -1498,6 +1520,10 @@ async function processCs2Request(templateName, url, options = {}) {
   // One payload for every CS2 screen: each template reads the keys it knows and ignores the rest.
   // `friendCode`/`code` are the two names the code screens use; the ban screen reads `cooldown`,
   // falls back to `time`, then `text` — all three carry the same label.
+  // Один шрифт под тремя именами: шаблоны называют поле по-разному — wrong_code читает fontDataUrl,
+  // not_found и ban — stratum2FontDataUrl. Лишние ключи шаблоны игнорируют.
+  const fontDataUrl = await loadCs2Font();
+
   const imageBuffer = await renderCs2Screenshot({
     templateName,
     payload: {
@@ -1508,7 +1534,11 @@ async function processCs2Request(templateName, url, options = {}) {
       banText,
       text: banText,
       time: banText,
-      cooldown: banText
+      cooldown: banText,
+      fontDataUrl,
+      fontUrl: fontDataUrl,
+      stratum2FontDataUrl: fontDataUrl,
+      stratum2FontUrl: fontDataUrl
     }
   });
 
