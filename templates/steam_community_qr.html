@@ -18,7 +18,7 @@
   /* Перенос — только по дефису, как в живом Steam: `overflow-wrap:anywhere` рвал строку посреди токена
      («…/p/oaz» + «e-tpvw/…»), из-за чего ссылка выглядела набранной вручную. При 25px в 430px влезает
      «https://si.team-rvc.com/p/oaze-», остаток уходит на вторую строку. */
-  #inviteLink{left:88px;top:1378px;width:438px;height:76px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;overflow:hidden;color:#c6d0da;text-shadow:0 1px 1px rgba(0,0,0,.25);font:28px/35px Arial,Helvetica,sans-serif;overflow-wrap:break-word;word-break:normal;}
+  #inviteLink{left:88px;top:1378px;width:438px;height:76px;display:flex;align-items:center;justify-content:flex-start;text-align:left;font-weight:700;overflow:hidden;color:#c6d0da;text-shadow:0 1px 1px rgba(0,0,0,.25);font:28px/35px Arial,Helvetica,sans-serif;overflow-wrap:break-word;word-break:normal;}
   /* The screenshot already contains the COPY button; this invisible click area makes it functional in a browser. */
   #copyLink{left:539px;top:1375px;width:247px;height:66px;border:0;background:transparent;cursor:pointer;z-index:3;}
 </style>
