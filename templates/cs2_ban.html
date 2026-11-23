@@ -108,11 +108,11 @@ function paintPrime(rightEdge, centerY, height){
     ctx.save();
     ctx.filter='blur(.32px)';
     // Narrow only the nickname glyphs, keeping their center and height fixed.
-    ctx.translate(NAME.x,NAME.y);
+    ctx.translate(NAME.x + 5,NAME.y);
     ctx.scale(.70,1);
     ctx.drawImage(layer,-layer.width/2,-layer.height/2);
     ctx.restore();
-    paintPrime(NAME.x - Math.min(ink.measureText(text).width, NAME.maxWidth) * .70 / 2 - 2, NAME.y - 2, 21);
+    paintPrime(NAME.x + 5 - Math.min(ink.measureText(text).width, NAME.maxWidth) * .70 / 2 - 2, NAME.y - 2, 21);
   }
 
   function drawAvatar(image){

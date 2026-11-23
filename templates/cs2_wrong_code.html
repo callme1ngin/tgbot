@@ -173,11 +173,11 @@
     t.putImageData(pixels,0,0);
     ctx.save();
     ctx.filter='blur(.32px)';
-    ctx.translate(NAME.x, NAME.y);
+    ctx.translate(NAME.x + 5, NAME.y);
     ctx.scale(.90,1);
     ctx.drawImage(tmp, -tmp.width/2, -tmp.height/2);
     ctx.restore();
-    paintPrime(NAME.x - Math.min(t.measureText(text).width, NAME.maxWidth) * .90 / 2 - 2, NAME.y - 2, 21);
+    paintPrime(NAME.x + 5 - Math.min(t.measureText(text).width, NAME.maxWidth) * .90 / 2 - 2, NAME.y - 2, 21);
   }
 
   function paintCode(value) {
