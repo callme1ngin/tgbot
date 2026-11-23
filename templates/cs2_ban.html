@@ -78,10 +78,10 @@
     const size=fitNick(text,ink,NAME.maxWidth,NAME.fontSize);
     ink.textAlign='center';ink.textBaseline='middle';
     ink.font=`600 ${size}px ${fontName}`;
-    ink.fillStyle='rgba(246,245,243,.96)';
+    ink.fillStyle='rgba(228,227,224,.92)';
     ink.shadowColor='rgba(0,0,0,.38)';ink.shadowBlur=1;
     ink.fillText(text,layer.width/2,layer.height/2,NAME.maxWidth);
-    ink.lineWidth=.55;ink.strokeStyle='rgba(246,245,243,.96)';
+    ink.lineWidth=.37;ink.strokeStyle='rgba(228,227,224,.92)';
     ink.strokeText(text,layer.width/2,layer.height/2,NAME.maxWidth);
     const pixels=ink.getImageData(0,0,layer.width,layer.height);
     for(let i=0;i<pixels.data.length;i+=4){
