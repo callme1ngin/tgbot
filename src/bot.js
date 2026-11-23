@@ -98,7 +98,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'add-error-header-v13';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'add-error-header-v14';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');
@@ -911,6 +911,10 @@ function buildAddFriendErrorDialog(profileName) {
 }
 
 // Шапка «мы в аккаунте» для страниц ошибки добавления: аватар и ник берутся с фейк-ссылки.
+//
+// Живёт в iframe: страница кита грузит свою таблицу стилей Steam, и любые наши классы она перебивает —
+// проверено, правила с !important бьют даже инлайн-стили. {srcdoc} изолирует шапку полностью, в обе
+// стороны: её стили не текут на страницу, стили страницы — на неё.
 async function buildAddErrorHeader(ownPageData) {
   if (!ownPageData || (!ownPageData.profileName && !ownPageData.avatarUrl)) {
     return '';
@@ -920,7 +924,16 @@ async function buildAddErrorHeader(ownPageData) {
   const nick = escapeHtml(ownPageData.profileName || 'Steam User');
   const pic = escapeHtml(await inlineAvatar(ownPageData.avatarUrl || ''));
 
-  return fragment.split('{{own_nick}}').join(nick).split('{{own_pic}}').join(pic);
+  const doc = fragment.split('{{own_nick}}').join(nick).split('{{own_pic}}').join(pic);
+  // Внутри srcdoc экранируем не только кавычки: иначе последующие вставки по строке (диалог перед
+  // </body>) попадают внутрь документа шапки и ломают её.
+  const srcdoc = doc
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  return `<iframe id="aeHeader" title="Steam" scrolling="no" srcdoc="${srcdoc}" style="display:block;width:100%;height:104px;border:0;margin:0;padding:0;position:relative;z-index:5;background:#171a21"></iframe>`;
 }
 
 function injectAddFriendErrorContent(html, finalUrl, actionsFragment, inviteBannerFragment = '', headerHtml = '') {
@@ -955,7 +968,7 @@ function injectAddFriendErrorContent(html, finalUrl, actionsFragment, inviteBann
 
     result = injectBeforeHeadEnd(
       result,
-      '<style>#global_header:not(#aeHeader),.responsive_page_frame>#global_header{display:none!important}</style>'
+      '<style>#global_header{display:none!important}</style>'
     );
 
     // Страница не должна подтягивать свою шапку скриптом.
