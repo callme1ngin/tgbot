@@ -98,7 +98,7 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'browser-error-v41';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'browser-error-v42';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
 const SILENTLOGO_PATH = path.join(PROJECT_ROOT, 'assets', 'silentlogo.png');
@@ -147,6 +147,52 @@ async function loadCs2Font() {
   }
 
   return cs2FontDataUrl;
+}
+
+// Шрифт для экранов «Ошибка браузера». Настоящий Segoe UI живёт только на Windows, в контейнере его
+// нет — поэтому файл лежит в assets. Пропадёт — останется Selawik (метрически совместимый, OFL),
+// а если нет и его — системный стек шаблона.
+const BROWSER_ERROR_FONT_PATH =
+  process.env.BROWSER_ERROR_FONT_PATH || path.join(PROJECT_ROOT, 'assets', 'segoe-ui.ttf');
+const BROWSER_ERROR_FONT_BOLD_PATH =
+  process.env.BROWSER_ERROR_FONT_BOLD_PATH || path.join(PROJECT_ROOT, 'assets', 'segoe-ui-bold.ttf');
+const BROWSER_ERROR_FONT_FALLBACK = path.join(PROJECT_ROOT, 'assets', 'selawik.ttf');
+const BROWSER_ERROR_FONT_BOLD_FALLBACK = path.join(PROJECT_ROOT, 'assets', 'selawik-bold.ttf');
+let browserErrorFonts;
+
+async function readFontDataUrl(targets) {
+  for (const target of targets) {
+    try {
+      const bytes = await fs.readFile(target);
+      return { dataUrl: `data:font/ttf;base64,${bytes.toString('base64')}`, path: target };
+    } catch (error) {
+      // Пробуем следующий файл: приоритет у настоящего шрифта, запасной — Selawik.
+    }
+  }
+
+  return { dataUrl: '', path: '' };
+}
+
+async function loadBrowserErrorFonts() {
+  if (browserErrorFonts) {
+    return browserErrorFonts;
+  }
+
+  const regular = await readFontDataUrl([BROWSER_ERROR_FONT_PATH, BROWSER_ERROR_FONT_FALLBACK]);
+  const bold = await readFontDataUrl([BROWSER_ERROR_FONT_BOLD_PATH, BROWSER_ERROR_FONT_BOLD_FALLBACK]);
+
+  browserErrorFonts = {
+    font: regular.dataUrl,
+    fontBold: bold.dataUrl || regular.dataUrl
+  };
+
+  console.log(
+    regular.path
+      ? `Browser error font: ${path.basename(regular.path)}`
+      : 'Browser error font: system stack'
+  );
+
+  return browserErrorFonts;
 }
 
 async function loadTemplate(templateName) {
@@ -1625,9 +1671,10 @@ async function processBrowserErrorRequest(url, templateName) {
   }
 
   const nick = await getBrowserTabTitle(url);
+  const fonts = await loadBrowserErrorFonts();
   const imageBuffer = await renderCanvasScreenshot({
     templateName,
-    payload: { url, nick }
+    payload: { url, nick, ...fonts }
   });
 
   screenshotCache.set(cacheKey, imageBuffer);
@@ -2187,7 +2234,7 @@ function templatePrompt(templateName) {
   }
 
   if (isBrowserErrorTemplate(templateName)) {
-    return 'Отправь ссылку на фейк.';
+    return 'Отправь френдлинк кита.';
   }
 
   if (templateName === config.TEMPLATES.STEAM_NOTICE) {
@@ -4298,13 +4345,8 @@ bot.on('text', async (ctx) => {
   }
 
   try {
-    // Фейк-ссылка для ошибки браузера может быть любой: в кадре она просто стоит в адресной строке,
-    // бот по ней ничего не открывает.
-    if (isBrowserErrorTemplate(state.template)) {
-      parseHttpUrl(url);
-    } else {
-      await assertPublicHttpUrl(url);
-    }
+    // Ссылка настоящая, кита: из неё берётся ник для вкладки, а сама она встаёт в адресную строку.
+    await assertPublicHttpUrl(url);
   } catch {
     state.status = 'waiting_link';
     userState.set(ctx.from.id, state);
