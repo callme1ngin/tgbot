@@ -113,8 +113,20 @@
     });
   }
 
+  // Фиолетовая рамка аватарки: у каждого экрана свои координаты, поэтому бокс приходит снаружи.
+  function paintAvatarFrame(box) {
+    ctx.save();
+    ctx.strokeStyle = '#a855f7';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(box.x - 1, box.y - 1, box.w + 2, box.h + 2);
+    ctx.restore();
+  }
+
   function paintAvatar(photo) {
-    if (!photo) return; // Blank placeholder square is already baked into the background.
+    if (!photo) {
+      paintAvatarFrame(BOX); // Blank placeholder square is already baked into the background.
+      return;
+    }
     const {x,y,w,h} = BOX;
     ctx.save();
     ctx.beginPath();
@@ -125,6 +137,7 @@
     const dh = photo.naturalHeight * scale;
     ctx.drawImage(photo, x+(w-dw)/2, y+(h-dh)/2, dw, dh);
     ctx.restore();
+    paintAvatarFrame(BOX);
   }
 
   function paintName(value) {

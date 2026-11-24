@@ -95,6 +95,13 @@ async function loadAvatar(src) {
   await image.decode();
   return image;
 }
+function paintAvatarFrame(box) {
+  ctx.save();
+  ctx.strokeStyle='#a855f7';
+  ctx.lineWidth=2;
+  ctx.strokeRect(box.x-1, box.y-1, box.w+2, box.h+2);
+  ctx.restore();
+}
 function drawAvatar(image) {
   const {x,y,w,h}=P.avatar;
   // Inner square only: retains the existing original pink CS2 profile frame,
@@ -109,6 +116,7 @@ function drawAvatar(image) {
     ctx.drawImage(image,x+(w-rw)/2,y+(h-rh)/2,rw,rh);
   }
   ctx.restore();
+  paintAvatarFrame(P.avatar);
 }
 function fontFit(text, size, maxWidth, family, minSize) {
   let n=size;

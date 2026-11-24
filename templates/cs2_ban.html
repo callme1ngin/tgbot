@@ -123,8 +123,16 @@ function paintPrime(rightEdge, centerY, height){
     paintPrime(NAME.x + 5 - Math.min(ink.measureText(text).width, NAME.maxWidth) * .90 / 2 - 2, NAME.y - 2, 21);
   }
 
+  function paintAvatarFrame(box){
+    ctx.save();
+    ctx.strokeStyle='#a855f7';
+    ctx.lineWidth=2;
+    ctx.strokeRect(box.x-1,box.y-1,box.w+2,box.h+2);
+    ctx.restore();
+  }
+
   function drawAvatar(image){
-    if(!image) return; // Original red avatar stays if replacement is absent.
+    if(!image){ paintAvatarFrame(AVATAR); return; } // Original red avatar stays if replacement is absent.
     const {x,y,w,h}=AVATAR;
     const iw=image.naturalWidth,ih=image.naturalHeight;
     const factor=Math.max(w/iw,h/ih);
@@ -132,6 +140,7 @@ function paintPrime(rightEdge, centerY, height){
     ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
     ctx.drawImage(image,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
     ctx.restore();
+    paintAvatarFrame(AVATAR);
   }
 
   async function loadAvatar(url){
