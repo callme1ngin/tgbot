@@ -82,7 +82,7 @@ function paintPrime(rightEdge, centerY, height){
     const ink=layer.getContext('2d',{willReadFrequently:true});
     let size=16;
     const setFont=()=>{
-      ink.font=`600 ${size}px ${fontName}`;
+      ink.font=`700 ${size}px ${fontName}`;
       ink.letterSpacing='-0.65px';
     };
     setFont();
@@ -94,7 +94,7 @@ function paintPrime(rightEdge, centerY, height){
     ink.fillStyle='rgba(228,227,224,.92)';
     ink.shadowColor='rgba(0,0,0,.38)';ink.shadowBlur=1;
     ink.fillText(text,layer.width/2,layer.height/2,NAME.maxWidth);
-    ink.lineWidth=.3;ink.strokeStyle='rgba(228,227,224,.92)';
+    ink.lineWidth=1.9;ink.strokeStyle='rgba(228,227,224,.92)';
     ink.strokeText(text,layer.width/2,layer.height/2,NAME.maxWidth);
     ink.shadowBlur=0;
     const pixels=ink.getImageData(0,0,layer.width,layer.height);
