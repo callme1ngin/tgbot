@@ -96,8 +96,11 @@ async function loadAvatar(src) {
   return image;
 }
 function paintAvatarFrame(box) {
+  // Затемнение аватарки и рамки: фото под ним гасится, рамка идёт уже тёмным оттенком.
   ctx.save();
-  ctx.strokeStyle='#be2d97';
+  ctx.fillStyle='rgba(0,0,0,.38)';
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.strokeStyle='#7c1a63';
   ctx.lineWidth=2;
   ctx.strokeRect(box.x-1, box.y-1, box.w+2, box.h+2);
   ctx.restore();
