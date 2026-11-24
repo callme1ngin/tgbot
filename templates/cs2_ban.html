@@ -91,12 +91,12 @@ function paintPrime(rightEdge, centerY, height){
       setFont();
     }
     ink.textAlign='center';ink.textBaseline='middle';
-    ink.fillStyle='rgba(228,227,224,.92)';
+    ink.fillStyle='rgba(243,242,239,.97)';
     ink.shadowColor='rgba(0,0,0,.38)';
     ink.shadowBlur=1;
     ink.fillText(text,tmp.width/2,tmp.height/2,NAME.maxWidth);
     ink.lineWidth=.3;
-    ink.strokeStyle='rgba(228,227,224,.92)';
+    ink.strokeStyle='rgba(243,242,239,.97)';
     ink.strokeText(text,tmp.width/2,tmp.height/2,NAME.maxWidth);
     ink.shadowBlur=0;
     const pixels=ink.getImageData(0,0,tmp.width,tmp.height);
