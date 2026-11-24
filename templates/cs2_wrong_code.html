@@ -125,7 +125,25 @@
     ctx.restore();
   }
 
+  // Заглушка в фоне: 58×61, внутри которой стоит аватарка. Закрашиваем её цветом карточки, чтобы по
+  // краям не оставалось серого пояска; сам аватар при этом остаётся прежнего размера.
+  const PLACEHOLDER = Object.freeze({ x: 965, y: 722, w: 58, h: 61 });
+  const CARD_TOP = '#4a453e';
+  const CARD_BOTTOM = '#4c4841';
+
+  function paintPlaceholderCover() {
+    const gradient = ctx.createLinearGradient(0, PLACEHOLDER.y, 0, PLACEHOLDER.y + PLACEHOLDER.h);
+    gradient.addColorStop(0, CARD_TOP);
+    gradient.addColorStop(1, CARD_BOTTOM);
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(PLACEHOLDER.x, PLACEHOLDER.y, PLACEHOLDER.w, PLACEHOLDER.h);
+    ctx.restore();
+  }
+
   function paintAvatar(photo) {
+    paintPlaceholderCover();
+
     if (!photo) {
       paintAvatarFrame(BOX); // Blank placeholder square is already baked into the background.
       return;

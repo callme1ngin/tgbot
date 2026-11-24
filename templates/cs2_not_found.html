@@ -105,7 +105,24 @@ function paintAvatarFrame(box) {
   ctx.strokeRect(box.x-1, box.y-1, box.w+2, box.h+2);
   ctx.restore();
 }
+// Заглушка в фоне: 58×61. Закрашиваем её цветом карточки, чтобы по краям аватарки не оставалось
+// серого пояска; сам аватар остаётся прежнего размера.
+const PLACEHOLDER = Object.freeze({ x: 960, y: 723, w: 58, h: 61 });
+const CARD_TOP = '#4a453e';
+const CARD_BOTTOM = '#4c4841';
+
+function paintPlaceholderCover() {
+  const gradient = ctx.createLinearGradient(0, PLACEHOLDER.y, 0, PLACEHOLDER.y + PLACEHOLDER.h);
+  gradient.addColorStop(0, CARD_TOP);
+  gradient.addColorStop(1, CARD_BOTTOM);
+  ctx.save();
+  ctx.fillStyle = gradient;
+  ctx.fillRect(PLACEHOLDER.x, PLACEHOLDER.y, PLACEHOLDER.w, PLACEHOLDER.h);
+  ctx.restore();
+}
+
 function drawAvatar(image) {
+  paintPlaceholderCover();
   const {x,y,w,h}=P.avatar;
   // Inner square only: retains the existing original pink CS2 profile frame,
   // gray account card, and badge beneath it.
