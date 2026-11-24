@@ -156,6 +156,7 @@
 | место | Chrome | Edge |
 |---|---|---|
 | вкладка | `Steam Community :: ник` | `Steam Community :: ник` |
+| иконка вкладки | логотип Steam | логотип Steam |
 | адресная строка | без схемы: `steamcommunity.com/profiles/…` | со схемой: `https://steamcommunity.com/profiles/…` |
 | тело | `Check if there is a typo in steamcommunity.com.` | то же, полужирным |
 
@@ -169,6 +170,9 @@
 
 Вкладка в кадре ~167 px, поэтому длинный ник Chrome в жизни обрезает многоточием — шаблон делает
 то же самое.
+
+Иконка вкладки — `assets/browser-steam-icon.png`, сжатая до 16×16 и вшитая в шаблон: она встаёт
+ровно на место глобуса (Chrome) и значка документа (Edge), 16×16 при x=50 / x=47, y=12.
 
 ### 5.5 Трекер
 
