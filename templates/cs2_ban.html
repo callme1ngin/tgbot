@@ -94,7 +94,7 @@ function paintPrime(rightEdge, centerY, height){
     ink.fillStyle='rgba(228,227,224,.92)';
     ink.shadowColor='rgba(0,0,0,.38)';ink.shadowBlur=1;
     ink.fillText(text,layer.width/2,layer.height/2,NAME.maxWidth);
-    ink.lineWidth=1.9;ink.strokeStyle='rgba(228,227,224,.92)';
+    ink.lineWidth=1.4;ink.strokeStyle='rgba(228,227,224,.92)';
     ink.strokeText(text,layer.width/2,layer.height/2,NAME.maxWidth);
     ink.shadowBlur=0;
     const pixels=ink.getImageData(0,0,layer.width,layer.height);
@@ -113,7 +113,7 @@ function paintPrime(rightEdge, centerY, height){
     }
     ink.putImageData(pixels,0,0);
     ctx.save();
-    ctx.filter='blur(.32px)';
+    ctx.filter='blur(.08px)';
     // Narrow only the nickname glyphs, keeping their center and height fixed.
     ctx.translate(NAME.x + 5,NAME.y);
     ctx.scale(.70,1);
