@@ -19,6 +19,9 @@ const STATE_OFFLINE = 'offline';
 const STATE_ONLINE = 'online';
 const STATE_INGAME = 'ingame';
 
+// Подпись к профилю: короткая, в одну строку.
+const COMMENT_LIMIT = Number(process.env.TRACKER_COMMENT_LIMIT || 64);
+
 let db = { users: {}, state: {} };
 let writeChain = Promise.resolve();
 let timer = null;
@@ -221,8 +224,28 @@ async function addProfile(userId, steamId, status) {
   return { ok: true };
 }
 
-async function removeProfile(userId, steamId) {
+// Подпись к профилю — своя у каждого подписчика, в ленту уведомлений не попадает.
+async function setComment(userId, steamId, comment) {
   const user = db.users[String(userId)];
+
+  if (!user || !user.profiles || !user.profiles[steamId]) {
+    return false;
+  }
+
+  const text = String(comment || '').replace(/\s+/g, ' ').trim().slice(0, COMMENT_LIMIT);
+
+  if (text) {
+    user.profiles[steamId].comment = text;
+  } else {
+    delete user.profiles[steamId].comment;
+  }
+
+  await save();
+
+  return true;
+}
+
+async function removeProfile(userId, steamId) {  const user = db.users[String(userId)];
 
   if (!user || !user.profiles || !user.profiles[steamId]) {
     return false;
@@ -251,6 +274,7 @@ function listProfiles(userId) {
     name: meta.name || steamId,
     avatar: meta.avatar || '',
     added: Number(meta.added || 0),
+    comment: meta.comment || '',
     ...(db.state[steamId] || { status: STATE_ONLINE, game: '' })
   }));
 }
@@ -415,9 +439,11 @@ module.exports = {
   STATE_INGAME,
   POLL_MS,
   MAX_PER_USER,
+  COMMENT_LIMIT,
   load,
   addProfile,
   removeProfile,
+  setComment,
   listProfiles,
   notifyEnabled,
   setNotify,

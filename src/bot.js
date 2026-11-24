@@ -2046,6 +2046,7 @@ function trackerProfileKeyboard(steamId) {
   return {
     inline_keyboard: [
       [b('🔄 Обновить', `tracker_refresh_${steamId}`)],
+      [b('✏️ Подпись', `tracker_comment_${steamId}`)],
       [b('🗑 Отписаться', `tracker_remove_${steamId}`)],
       [b('← Назад', 'tracker_list')]
     ]
@@ -3106,7 +3107,14 @@ function trackerMenuText(ctx) {
 function trackerCardText(profile, steamId, tail) {
   return formatHintRaw(
     `${TRACKER_LABEL} · ${escapeHtml(profile.name || steamId)}`,
-    [trackerStatusLabel(profile), `SteamID: ${steamId}`, tail].filter(Boolean).join('\n')
+    [
+      trackerStatusLabel(profile),
+      profile.comment ? `✏️ ${profile.comment}` : '',
+      `SteamID: ${steamId}`,
+      tail
+    ]
+      .filter(Boolean)
+      .join('\n')
   );
 }
 
@@ -3187,6 +3195,7 @@ bot.action(/^tracker_open_(7656119[0-9]{10})$/, async (ctx) => {
   await ctx.answerCbQuery();
 
   const steamId = ctx.match[1];
+  const state = getUserState(ctx);
   const profile = tracker.listProfiles(ctx.from.id).find((item) => item.steamId === steamId);
 
   if (!profile) {
@@ -3194,7 +3203,37 @@ bot.action(/^tracker_open_(7656119[0-9]{10})$/, async (ctx) => {
     return;
   }
 
+  state.status = 'tracker_menu';
+  state.trackerCommentId = null;
+  userState.set(ctx.from.id, state);
+
   await editMenu(ctx, trackerCardText(profile, steamId), trackerProfileKeyboard(steamId));
+});
+
+// Подпись к профилю: бот ждёт одну строку, карточка профиля остаётся точкой возврата.
+bot.action(/^tracker_comment_(7656119[0-9]{10})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const steamId = ctx.match[1];
+  const state = getUserState(ctx);
+  const profile = tracker.listProfiles(ctx.from.id).find((item) => item.steamId === steamId);
+
+  if (!profile) {
+    await showTracker(ctx);
+    return;
+  }
+
+  state.status = 'tracker_waiting_comment';
+  state.trackerCommentId = steamId;
+  userState.set(ctx.from.id, state);
+
+  const current = profile.comment ? `Сейчас: ${profile.comment}\n` : '';
+
+  await replaceMenu(
+    ctx,
+    trackerHint(`${current}Отправь подпись к профилю, до ${tracker.COMMENT_LIMIT} символов. Пустое сообщение — стереть.`),
+    { inline_keyboard: [[b('← Назад', `tracker_open_${steamId}`)]] }
+  );
 });
 
 bot.action(/^tracker_refresh_(7656119[0-9]{10})$/, async (ctx) => {
@@ -3770,6 +3809,37 @@ bot.on('text', async (ctx) => {
       );
     }
 
+    return;
+  }
+
+  if (state.status === 'tracker_waiting_comment') {
+    await deleteIncomingMessage(ctx);
+
+    const steamId = state.trackerCommentId;
+
+    if (!steamId) {
+      await showTracker(ctx);
+      return;
+    }
+
+    await tracker.setComment(ctx.from.id, steamId, url);
+
+    const profile = tracker.listProfiles(ctx.from.id).find((item) => item.steamId === steamId);
+
+    state.status = 'tracker_menu';
+    state.trackerCommentId = null;
+    userState.set(ctx.from.id, state);
+
+    if (!profile) {
+      await showTracker(ctx);
+      return;
+    }
+
+    await editMenu(
+      ctx,
+      trackerCardText(profile, steamId),
+      trackerProfileKeyboard(steamId)
+    );
     return;
   }
 
