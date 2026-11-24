@@ -3368,7 +3368,12 @@ async function handleTrackerChanges(changes) {
         continue;
       }
 
-      await bot.telegram.sendMessage(subscriber.userId, text, { parse_mode: 'HTML' }).catch((error) => {
+      // Подпись своя у каждого подписчика, поэтому строку собираем внутри цикла, а не до него.
+      const body = subscriber.comment
+        ? `${text}\n✏️ ${escapeHtml(subscriber.comment)}`
+        : text;
+
+      await bot.telegram.sendMessage(subscriber.userId, body, { parse_mode: 'HTML' }).catch((error) => {
         console.warn(`tracker: message to ${subscriber.userId} failed (${error.description || error.message})`);
       });
     }

@@ -101,7 +101,11 @@ function subscribersOf(steamId) {
 
   for (const [userId, user] of Object.entries(db.users)) {
     if (user.profiles && user.profiles[steamId]) {
-      out.push({ userId, notify: user.notify !== false });
+      out.push({
+        userId,
+        notify: user.notify !== false,
+        comment: user.profiles[steamId].comment || ''
+      });
     }
   }
 
