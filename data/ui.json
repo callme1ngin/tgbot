@@ -12,7 +12,9 @@
     "qr_friend": { "icon": "5769163860565041689", "style": "primary" },
     "template_steam_notice": { "icon": "5769318599646781593", "style": "primary" },
     "template_add_error": { "icon": "5769180082656518775", "style": "primary" },
-    "template_error": { "icon": "5766962281803948850", "style": "primary" },
+    "browser_error": { "icon": "5766962281803948850", "style": "primary" },
+    "browser_error_chrome": { "icon": "", "style": "" },
+    "browser_error_edge": { "icon": "", "style": "" },
     "template_steam_china": { "icon": "5769172811276887156", "style": "primary" },
 
     "friend_variant_pc": { "icon": "5769232116185309637", "style": "" },

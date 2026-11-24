@@ -3,7 +3,10 @@ module.exports = {
 
   TEMPLATES: {
     ADD_ERROR: 'addFriendError',
-    ERROR: 'BrowserError',
+    // Ошибка браузера в двух вариантах: у каждого свой фон, своя вкладка и своя адресная строка.
+    // Данные приходят через window.renderBrowserError({ url, nick }).
+    ERROR_CHROME: 'browser_error_chrome',
+    ERROR_EDGE: 'browser_error_edge',
     FRIEND: 'friendpage.bundle',
     // Phone mockup of the same screen: a fixed 875×1798 frame with window.renderSteamFriend().
     FRIEND_MOBILE: 'friendpage-mobile.bundle',
@@ -46,9 +49,6 @@ module.exports = {
     FRIEND_CODE: '{{FRIEND_CODE}}',
     FRIEND_CODE_INPUT: '{{FRIEND_CODE_INPUT}}',
     FRIEND_CODE_INPUT_PLACEHOLDER: '{{FRIEND_CODE_INPUT_PLACEHOLDER}}',
-    BROWSER_TAB_TITLE: '{{BROWSER_TAB_TITLE}}',
-    BROWSER_URL_PROTOCOL: '{{BROWSER_URL_PROTOCOL}}',
-    BROWSER_URL_DISPLAY: '{{BROWSER_URL_DISPLAY}}',
     SENT_URL: '{{SENT_URL}}',
   }
 };

@@ -98,10 +98,9 @@ const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 2);
 const FETCH_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 500);
 const IMAGE_LOAD_TIMEOUT_MS = Number(process.env.IMAGE_LOAD_TIMEOUT_MS || 5000);
 const IMAGE_RETRY_COUNT = Number(process.env.IMAGE_RETRY_COUNT || 1);
-const SCREENSHOT_CACHE_VERSION = 'cs2-cover-v40';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
+const SCREENSHOT_CACHE_VERSION = 'browser-error-v41';const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3000);
 const PROJECT_ROOT = path.join(__dirname, '..');
 const FRIENDPAGE_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'friendpage_example.png');
-const BROWSERERROR_EXAMPLE_PATH = path.join(PROJECT_ROOT, 'assets', 'BrowserError.png');
 const SILENTLOGO_PATH = path.join(PROJECT_ROOT, 'assets', 'silentlogo.png');
 // The Dota fake-code screen is a finished picture, not a template: it is sent as is.
 const DOTA_FAKE_CODE_PATH = path.join(PROJECT_ROOT, 'assets', 'dota_fake_code.png');
@@ -115,13 +114,6 @@ const photoAssets = {
     path: FRIENDPAGE_EXAMPLE_PATH,
     filename: 'friendpage_example.png',
     fileIdPath: path.join(RUNTIME_CACHE_DIR, 'friendpage-example-file-id.txt'),
-    buffer: null,
-    fileId: null
-  },
-  browserErrorExample: {
-    path: BROWSERERROR_EXAMPLE_PATH,
-    filename: 'BrowserError.png',
-    fileIdPath: path.join(RUNTIME_CACHE_DIR, 'browser-error-example-file-id.txt'),
     buffer: null,
     fileId: null
   },
@@ -428,22 +420,6 @@ async function getBrowserTabTitle(rawUrl) {
   }
 }
 
-async function formatBrowserErrorData(rawUrl) {
-  const parsed = parseHttpUrl(rawUrl);
-  const displayUrl = `${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`
-    .replace(/\/$/, '') || parsed.host;
-  const tabTitle = await getBrowserTabTitle(rawUrl);
-
-  return {
-    browserUrlProtocol: parsed.protocol.replace(':', ''),
-    browserUrlDisplay: displayUrl,
-    browserTabTitle: tabTitle,
-    title: tabTitle,
-    description: rawUrl,
-    sentUrl: rawUrl
-  };
-}
-
 function delay(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -597,7 +573,8 @@ const SCREEN_ICONS = {
   [config.TEMPLATES.QR_FRIEND]: { id: '5769163860565041689', glyph: '📷', title: 'QR-страница' },
   [config.TEMPLATES.STEAM_NOTICE]: { id: '5769318599646781593', glyph: '🚨', title: 'Steam Fake Alert' },
   [config.TEMPLATES.ADD_ERROR]: { id: '5769180082656518775', glyph: '🫂', title: 'Ошибка добавления' },
-  [config.TEMPLATES.ERROR]: { id: '5766962281803948850', glyph: '⚠️', title: 'Ошибка браузера' },
+  [config.TEMPLATES.ERROR_CHROME]: { id: '5766962281803948850', glyph: '⚠️', title: 'Ошибка браузера · Chrome' },
+  [config.TEMPLATES.ERROR_EDGE]: { id: '5766962281803948850', glyph: '⚠️', title: 'Ошибка браузера · Edge' },
   [config.TEMPLATES.STEAM_CHINA]: { id: '5769172811276887156', glyph: '🇨🇳', title: 'Steam China' },
   [config.TEMPLATES.CS2_WRONG_CODE]: { id: '5769364285213909331', glyph: '🎯', title: 'CS2 Fake Code' },
   [config.TEMPLATES.CS2_NOT_FOUND]: { id: '5767296748087157309', glyph: '❓', title: 'CS2 Code Not Found' },
@@ -817,9 +794,6 @@ function injectDataIntoTemplate(template, data) {
     FRIEND_CODE: data.friendCode || '',
     FRIEND_CODE_INPUT: data.friendCodeInput || '',
     FRIEND_CODE_INPUT_PLACEHOLDER: data.friendCodeInputPlaceholder || '',
-    BROWSER_TAB_TITLE: data.browserTabTitle || data.browserUrlDisplay || '',
-    BROWSER_URL_PROTOCOL: data.browserUrlProtocol || 'https',
-    BROWSER_URL_DISPLAY: data.browserUrlDisplay || '',
     SENT_URL: data.sentUrl || ''
   };
 
@@ -1297,7 +1271,6 @@ async function screenshotPhoneFriend(html, data) {
 async function processRequest(url, templateName, options = {}) {
   const isFriendPage = isFriendLikeTemplate(templateName);
   const isPhoneFriend = templateName === config.TEMPLATES.FRIEND_MOBILE;
-  const isBrowserError = templateName === config.TEMPLATES.ERROR;
   const isAddFriendError = templateName === config.TEMPLATES.ADD_ERROR;
   const cacheKey = screenshotCache.generateKey(url, templateName, {
     renderVersion: SCREENSHOT_CACHE_VERSION,
@@ -1338,9 +1311,7 @@ async function processRequest(url, templateName, options = {}) {
   } else {
     const template = await loadTemplate(templateName);
 
-    if (isBrowserError) {
-      pageData = await formatBrowserErrorData(url);
-    } else if (isFriendPage) {
+    if (isFriendPage) {
       pageData = await loadFriendPageData(url);
     } else {
       const { html: originalHtml, finalUrl } = await loadHtml(url);
@@ -1511,7 +1482,9 @@ async function inlineAvatar(url) {
   return value;
 }
 
-async function renderCs2Screenshot({ templateName, payload }) {
+// Canvas-шаблоны (CS2, ошибка браузера) сами рисуют картинку и отдают её размер: вьюпорт берётся
+// с канваса, поэтому итоговый скриншот совпадает с ним пиксель в пиксель.
+async function renderCanvasScreenshot({ templateName, payload }) {
   const template = await loadTemplate(templateName);
   const page = await browserPool.getPage();
 
@@ -1525,7 +1498,8 @@ async function renderCs2Screenshot({ templateName, payload }) {
       () =>
         typeof window.renderProfile === 'function' ||
         typeof window.renderCS2 === 'function' ||
-        typeof window.setCS2 === 'function',
+        typeof window.setCS2 === 'function' ||
+        typeof window.renderBrowserError === 'function',
       undefined,
       { timeout: 15000 }
     );
@@ -1545,10 +1519,14 @@ async function renderCs2Screenshot({ templateName, payload }) {
     await page.setViewportSize(size);
 
     // renderProfile resolves only after the background, the avatar and the fonts are ready.
-    // The templates name that entry point differently — renderProfile, renderCS2, setCS2 — so whichever
-    // one is there is called with the same payload.
+    // The templates name that entry point differently — renderProfile, renderCS2, setCS2,
+    // renderBrowserError — so whichever one is there is called with the same payload.
     const rendered = await page.evaluate(async (data) => {
-      const render = window.renderProfile || window.renderCS2 || window.setCS2;
+      const render =
+        window.renderProfile ||
+        window.renderCS2 ||
+        window.setCS2 ||
+        window.renderBrowserError;
 
       try {
         return await render(data);
@@ -1602,7 +1580,7 @@ async function processCs2Request(templateName, url, options = {}) {
   // not_found и ban — stratum2FontDataUrl. Лишние ключи шаблоны игнорируют.
   const fontDataUrl = await loadCs2Font();
 
-  const imageBuffer = await renderCs2Screenshot({
+  const imageBuffer = await renderCanvasScreenshot({
     templateName,
     payload: {
       nickname: profile.nickname,
@@ -1618,6 +1596,38 @@ async function processCs2Request(templateName, url, options = {}) {
       stratum2FontDataUrl: fontDataUrl,
       stratum2FontUrl: fontDataUrl
     }
+  });
+
+  screenshotCache.set(cacheKey, imageBuffer);
+  console.log(`Screenshot created for ${templateName}: ${url}`);
+
+  return imageBuffer;
+}
+
+function isBrowserErrorTemplate(templateName) {
+  return (
+    templateName === config.TEMPLATES.ERROR_CHROME ||
+    templateName === config.TEMPLATES.ERROR_EDGE
+  );
+}
+
+// Ошибка браузера: два готовых фона (Chrome, Edge), поверх — только вкладка и адресная строка.
+// Ссылка идёт в адресную строку как есть, ник для вкладки читается из самой ссылки.
+async function processBrowserErrorRequest(url, templateName) {
+  const cacheKey = screenshotCache.generateKey(url, templateName, {
+    renderVersion: SCREENSHOT_CACHE_VERSION
+  });
+  const cached = screenshotCache.get(cacheKey);
+
+  if (cached) {
+    console.log(`Cache hit for ${templateName}: ${url}`);
+    return cached;
+  }
+
+  const nick = await getBrowserTabTitle(url);
+  const imageBuffer = await renderCanvasScreenshot({
+    templateName,
+    payload: { url, nick }
   });
 
   screenshotCache.set(cacheKey, imageBuffer);
@@ -1992,7 +2002,7 @@ function profileKeyboard() {
       [b('📷 QR-страница', 'qr_friend')],
       [b('🚨 Steam Fake Alert', 'template_steam_notice')],
       [b('🫂 Ошибка добавления', 'template_add_error')],
-      [b('⚠️ Ошибка браузера', 'template_error')],
+      [b('⚠️ Ошибка браузера', 'browser_error')],
       [b('🇨🇳 Steam China', 'template_steam_china')],
       homeRow()
     ]
@@ -2128,8 +2138,12 @@ function templateLabel(templateName) {
     return '🚨 Steam Fake Alert';
   }
 
-  if (templateName === config.TEMPLATES.ERROR) {
-    return '⚠️ Ошибка браузера';
+  if (templateName === config.TEMPLATES.ERROR_CHROME) {
+    return '⚠️ Ошибка браузера · Chrome';
+  }
+
+  if (templateName === config.TEMPLATES.ERROR_EDGE) {
+    return '⚠️ Ошибка браузера · Edge';
   }
 
   if (templateName === config.TEMPLATES.ADD_ERROR) {
@@ -2172,8 +2186,8 @@ function templatePrompt(templateName) {
     return 'Отправь ссылку на фейк.';
   }
 
-  if (templateName === config.TEMPLATES.ERROR) {
-    return 'Отправь friend link кита';
+  if (isBrowserErrorTemplate(templateName)) {
+    return 'Отправь ссылку на фейк.';
   }
 
   if (templateName === config.TEMPLATES.STEAM_NOTICE) {
@@ -2209,6 +2223,17 @@ function templatePrompt(templateName) {
   }
 
   return 'Отправь ссылку для обработки.';
+}
+
+// Ошибка браузера различается фоном: у Chrome и Edge свои вкладка, адресная строка и цвета.
+function browserErrorKeyboard() {
+  return {
+    inline_keyboard: [
+      [b('🌐 Chrome', 'browser_error_chrome'), b('🌐 Edge', 'browser_error_edge')],
+      backRow('section_profile'),
+      homeRow()
+    ]
+  };
 }
 
 function addErrorModeKeyboard() {
@@ -2645,11 +2670,6 @@ async function selectTemplate(ctx, templateName) {
     return;
   }
 
-  if (templateName === config.TEMPLATES.ERROR) {
-    await replaceMenuWithPhoto(ctx, BROWSERERROR_EXAMPLE_PATH, menuText, waitingKeyboard(templateName));
-    return;
-  }
-
   if (templateName === config.TEMPLATES.ADD_ERROR) {
     await editMenu(ctx, menuText, addErrorModeKeyboard());
     return;
@@ -2924,7 +2944,27 @@ bot.action('again', async (ctx) => {
   await selectTemplate(ctx, template);
 });
 
-bot.action('template_error', (ctx) => selectTemplate(ctx, config.TEMPLATES.ERROR));
+// «Ошибка браузера» — сначала выбор браузера, дальше обычный запрос ссылки.
+bot.action('browser_error', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.template = null;
+  state.status = 'choosing_browser';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHintRaw(
+      `<tg-emoji emoji-id="${SCREEN_ICONS[config.TEMPLATES.ERROR_CHROME].id}">⚠️</tg-emoji> Ошибка браузера`,
+      'Выбери браузер, под который делаем скриншот.'
+    ),
+    browserErrorKeyboard()
+  );
+});
+
+bot.action('browser_error_chrome', (ctx) => selectTemplate(ctx, config.TEMPLATES.ERROR_CHROME));
+bot.action('browser_error_edge', (ctx) => selectTemplate(ctx, config.TEMPLATES.ERROR_EDGE));
 bot.action('template_friend', (ctx) => selectTemplate(ctx, config.TEMPLATES.FRIEND));
 bot.action('template_add_error', (ctx) => selectTemplate(ctx, config.TEMPLATES.ADD_ERROR));
 bot.action('template_steam_china', (ctx) => selectTemplate(ctx, config.TEMPLATES.STEAM_CHINA));
@@ -4258,7 +4298,9 @@ bot.on('text', async (ctx) => {
   }
 
   try {
-    if (state.template === config.TEMPLATES.ERROR) {
+    // Фейк-ссылка для ошибки браузера может быть любой: в кадре она просто стоит в адресной строке,
+    // бот по ней ничего не открывает.
+    if (isBrowserErrorTemplate(state.template)) {
       parseHttpUrl(url);
     } else {
       await assertPublicHttpUrl(url);
@@ -4313,11 +4355,16 @@ bot.on('text', async (ctx) => {
     state.status = 'processing';
     userState.set(ctx.from.id, state);
 
-    progressMessage = await sendProgressMessage(ctx, 'Читаю профиль…');
+    progressMessage = await sendProgressMessage(
+      ctx,
+      isBrowserErrorTemplate(state.template) ? 'Собираю изображение…' : 'Читаю профиль…'
+    );
 
     const taskId = `${ctx.from.id}_${Date.now()}`;
     const { imageBuffer, pageData } = await requestQueue.add(taskId, () =>
-      processRequest(url, state.template, { addErrorMode: state.addErrorMode })
+      isBrowserErrorTemplate(state.template)
+        ? processBrowserErrorRequest(url, state.template).then((imageBuffer) => ({ imageBuffer, pageData: null }))
+        : processRequest(url, state.template, { addErrorMode: state.addErrorMode })
     );
 
     await deleteProgressMessage(ctx, progressMessage);

@@ -26,9 +26,13 @@
 
 Разделы и навигация: `section_profile`, `section_codes`, `tracker_menu`, `root_menu`, `again`.
 
-Профиль: `template_friend`, `qr_friend`, `template_steam_notice`, `template_add_error`, `template_error`,
-`template_steam_china`, `friend_variant_pc`, `friend_variant_mobile`, `add_error_profile`,
-`add_error_friendlink`, `add_error_phone`, `add_friend_code`.
+Профиль: `template_friend`, `qr_friend`, `template_steam_notice`, `template_add_error`, `browser_error`,
+`browser_error_chrome`, `browser_error_edge`, `template_steam_china`, `friend_variant_pc`,
+`friend_variant_mobile`, `add_error_profile`, `add_error_friendlink`, `add_error_phone`,
+`add_friend_code`.
+
+`browser_error_chrome` и `browser_error_edge` пока без иконки: подписи пишутся как `🌐 Chrome` / `🌐 Edge`,
+а `custom_emoji_id` для логотипов вписывается в `ui.json` без правки кода.
 
 Коды: `cs2_menu`, `dota_menu`, `cs2_fake_code`, `cs2_not_found`, `cs2_ban`, `cs2b_custom`,
 `dota_fake_code`, `dota_not_found`, `dota_not_friends`. Время бана (`cs2b_30m` … `cs2b_7d`) стиля не
@@ -76,7 +80,7 @@
 | 📷 QR-страница | 5769163860565041689 |
 | 🚨 Steam Fake Alert | 5769318599646781593 |
 | 🫂 Ошибка добавления (· Профиль / Френдлинк / Телефон) | 5769180082656518775 |
-| ⚠️ Ошибка браузера | 5766962281803948850 |
+| ⚠️ Ошибка браузера (и · Chrome / · Edge) | 5766962281803948850 |
 | 🇨🇳 Steam China | 5769172811276887156 |
 | 🎯 CS2 Fake Code | 5769364285213909331 |
 | ❓ CS2 Code Not Found | 5767296748087157309 |
