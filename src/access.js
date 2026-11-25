@@ -134,6 +134,27 @@ function atLeast(userId, role) {
   return level(roleOf(userId).role) >= level(role);
 }
 
+// Запись как она лежит в файле: срок мог истечь, но редактировать надо то, что есть, а не «none».
+function stored(userId) {
+  const entry = db.users[String(userId)];
+
+  if (!entry || !entry.role) {
+    return null;
+  }
+
+  return {
+    role: entry.role,
+    until: entry.until ? Number(entry.until) : null,
+    grantedBy: String(entry.grantedBy || ''),
+    grantedAt: Number(entry.grantedAt || 0)
+  };
+}
+
+// Админ из ADMIN_IDS живёт вне файла: снять его через бота нельзя, только убрать ID из окружения.
+function isEnvAdmin(userId) {
+  return adminIds().includes(String(userId));
+}
+
 function canRenderVAC(userId) {
   return atLeast(userId, ROLE_CHATTER);
 }
@@ -302,6 +323,8 @@ module.exports = {
   atLeast,
   isAdmin,
   canRenderVAC,
+  stored,
+  isEnvAdmin,
   setRole,
   clearRole,
   createPromo,

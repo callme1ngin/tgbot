@@ -2178,7 +2178,7 @@ function adminKeyboard() {
   return {
     inline_keyboard: [
       [b('🎟 Создать промокод', 'admin_promo_new')],
-      [b('👤 Выдать роль по ID', 'admin_grant')],
+      [b('👤 Роли по ID', 'admin_grant')],
       [b('🛡 Выдать админку', 'admin_grant_admin')],
       [b('🗂 Промокоды', 'admin_promos')],
       [b('← Назад', 'access_profile')]
@@ -2210,6 +2210,60 @@ function promoListKeyboard() {
   rows.push([b('← Назад', 'admin_panel')]);
 
   return { inline_keyboard: rows };
+}
+
+// Карточка роли по Telegram ID: смотреть, менять, снимать. Админ из ADMIN_IDS снимается только
+// в окружении, поэтому кнопки снятия у него нет — об этом сказано прямо на карточке.
+function userCardText(targetId) {
+  const stored = access.stored(targetId);
+  const lines = [`ID <code>${escapeHtml(targetId)}</code>`];
+
+  if (access.isEnvAdmin(targetId)) {
+    lines.push(`Сейчас: <b>${access.LABEL[access.ROLE_ADMIN]}</b> · из ADMIN_IDS`);
+    lines.push('Снимается только в <code>.env</code> на сервере.');
+    return lines.join('\n');
+  }
+
+  if (!stored) {
+    lines.push('Сейчас: роли нет');
+    return lines.join('\n');
+  }
+
+  lines.push(
+    `Сейчас: <b>${access.LABEL[stored.role]}</b> · ` +
+      (stored.until ? formatMoment(stored.until) : 'бессрочно')
+  );
+
+  if (stored.until && stored.until <= Math.floor(Date.now() / 1000)) {
+    lines.push('Срок истёк — доступ уже закрыт.');
+  }
+
+  if (stored.grantedBy) {
+    lines.push(`Выдал: <code>${escapeHtml(stored.grantedBy)}</code>`);
+  }
+
+  return lines.join('\n');
+}
+
+function userCardKeyboard(targetId) {
+  // Админа из ADMIN_IDS менять нечем: файл его всё равно не перебьёт.
+  if (access.isEnvAdmin(targetId)) {
+    return { inline_keyboard: [[b('← Назад', 'admin_panel')]] };
+  }
+
+  const rows = [[b('✏️ Изменить роль', `admin_user_role_${targetId}`)]];
+
+  if (access.stored(targetId)) {
+    rows.push([b('🗑 Снять роль', `admin_user_clear_${targetId}`)]);
+  }
+
+  rows.push([b('← Назад', 'admin_panel')]);
+
+  return { inline_keyboard: rows };
+}
+
+async function showUserCard(ctx, targetId) {
+  await editMenu(ctx, formatHintHtml(ADMIN_LABEL, userCardText(targetId)), userCardKeyboard(targetId));
 }
 
 // Код без спецсимволов: его набирают руками в чате.
@@ -3315,7 +3369,7 @@ bot.action('admin_grant', async (ctx) => {
 
   await editMenu(
     ctx,
-    formatHintRaw(ADMIN_LABEL, 'Отправь Telegram ID того, кому выдаём роль.'),
+    formatHintRaw(ADMIN_LABEL, 'Отправь Telegram ID — покажу роль и дам изменить или снять.'),
     { inline_keyboard: [[b('✖️ Отмена', 'admin_panel')]] }
   );
 });
@@ -3333,6 +3387,65 @@ bot.action('admin_grant_admin', async (ctx) => {
     formatHintRaw(ADMIN_LABEL, 'Админка бессрочная. Отправь Telegram ID.'),
     { inline_keyboard: [[b('✖️ Отмена', 'admin_panel')]] }
   );
+});
+
+bot.action(/^admin_user_clear_yes_(\d{4,20})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  await access.clearRole(ctx.match[1]);
+  await showUserCard(ctx, ctx.match[1]);
+});
+
+bot.action(/^admin_user_clear_(\d{4,20})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const targetId = ctx.match[1];
+
+  if (access.isEnvAdmin(targetId)) {
+    await showUserCard(ctx, targetId);
+    return;
+  }
+
+  await editMenu(
+    ctx,
+    formatHintHtml(
+      ADMIN_LABEL,
+      `Снять роль с <code>${escapeHtml(targetId)}</code>?\n` +
+        'Доступ к отрисовкам закроется сразу.' +
+        (String(targetId) === String(ctx.from.id)
+          ? '\n\nЭто твой ID: в панель вернёшься только через <code>ADMIN_IDS</code> в окружении.'
+          : '')
+    ),
+    {
+      inline_keyboard: [
+        [b('🗑 Да, снять', `admin_user_clear_yes_${targetId}`)],
+        [b('← Назад', `admin_user_${targetId}`)]
+      ]
+    }
+  );
+});
+
+bot.action(/^admin_user_role_(\d{4,20})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const targetId = ctx.match[1];
+  const state = getUserState(ctx);
+
+  state.admin = { role: null, days: null, targetId };
+  state.status = 'admin_grant_role';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHintHtml(ADMIN_LABEL, `ID <code>${escapeHtml(targetId)}</code>.\nКакую роль выдаём?`),
+    roleChoiceKeyboard('admin_grant_role', `admin_user_${targetId}`)
+  );
+});
+
+// Карточка роли по ID: посмотреть, изменить, снять.
+bot.action(/^admin_user_(\d{4,20})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await showUserCard(ctx, ctx.match[1]);
 });
 
 bot.action(/^admin_grant_role_(worker|chatter|admin)$/, async (ctx) => {
@@ -3356,7 +3469,7 @@ bot.action(/^admin_grant_role_(worker|chatter|admin)$/, async (ctx) => {
       ADMIN_LABEL,
       `ID <code>${escapeHtml(admin.targetId)}</code> · ${access.LABEL[ctx.match[1]]}.\nТеперь срок.`
     ),
-    termChoiceKeyboard('admin_grant_days', 'admin_grant')
+    termChoiceKeyboard('admin_grant_days', `admin_user_${admin.targetId}`)
   );
 });
 
@@ -3372,23 +3485,14 @@ bot.action(/^admin_grant_days_(\d+)$/, async (ctx) => {
     return;
   }
 
-  const entry = await access.setRole(admin.targetId, admin.role, days, ctx.from.id);
+  await access.setRole(admin.targetId, admin.role, days, ctx.from.id);
 
   state.status = 'admin_panel';
   state.admin = { role: null, days: null, targetId: null };
   userState.set(ctx.from.id, state);
 
-  const term = entry.until ? formatMoment(entry.until) : 'бессрочно';
-
-  await editMenu(
-    ctx,
-    formatHintHtml(
-      ADMIN_LABEL,
-      `Готово.\nID <code>${escapeHtml(admin.targetId)}</code>\n` +
-        `Роль: ${access.LABEL[admin.role]}\nДо: ${term}`
-    ),
-    adminKeyboard()
-  );
+  // Возвращаемся в карточку: там сразу видно, что получилось, и можно поправить.
+  await showUserCard(ctx, admin.targetId);
 });
 
 // VAC — пока заглушка: шаблона ещё нет, но кнопка и проверка доступа уже на месте.
@@ -4095,23 +4199,15 @@ bot.on('text', async (ctx) => {
       state.admin = { role: null, days: null, targetId: null };
       userState.set(ctx.from.id, state);
 
-      await editMenu(
-        ctx,
-        formatHintHtml(ADMIN_LABEL, `Админка выдана.\nID <code>${escapeHtml(targetId)}</code>, бессрочно.`),
-        adminKeyboard()
-      );
+      await showUserCard(ctx, targetId);
       return;
     }
 
-    state.admin = { ...(state.admin || {}), targetId };
-    state.status = 'admin_grant_role';
+    state.admin = { role: null, days: null, targetId };
+    state.status = 'admin_panel';
     userState.set(ctx.from.id, state);
 
-    await editMenu(
-      ctx,
-      formatHintHtml(ADMIN_LABEL, `ID <code>${escapeHtml(targetId)}</code>.\nКакую роль выдаём?`),
-      roleChoiceKeyboard('admin_grant_role', 'admin_panel')
-    );
+    await showUserCard(ctx, targetId);
     return;
   }
 
