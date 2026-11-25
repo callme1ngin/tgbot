@@ -26,6 +26,12 @@
 
 Разделы и навигация: `section_profile`, `section_codes`, `tracker_menu`, `root_menu`, `again`.
 
+Аккаунт и админка: `access_profile` (серая, без стиля), `access_buy`, `access_admin`, `admin_panel`,
+`admin_promo_new`, `admin_promo_random`, `admin_promos`, `admin_promo_del_*` (danger),
+`admin_grant`, `admin_grant_admin` (danger). Шаги мастеров (`admin_promo_role_*`,
+`admin_promo_days_*`, `admin_grant_role_*`, `admin_grant_days_*`) намеренно без вида: это выбор
+внутри шага, красить его незачем.
+
 Профиль: `template_friend`, `qr_friend`, `template_steam_notice`, `template_add_error`, `browser_error`,
 `browser_error_chrome`, `browser_error_edge`, `template_steam_china`, `friend_variant_pc`,
 `friend_variant_mobile`, `add_error_profile`, `add_error_friendlink`, `add_error_phone`,
@@ -35,8 +41,9 @@
 а `custom_emoji_id` для логотипов вписывается в `ui.json` без правки кода.
 
 Коды: `cs2_menu`, `dota_menu`, `cs2_fake_code`, `cs2_not_found`, `cs2_ban`, `cs2b_custom`,
-`dota_fake_code`, `dota_not_found`, `dota_not_friends`. Время бана (`cs2b_30m` … `cs2b_7d`) стиля не
-имеет специально: восемь красных кнопок — это шум, а не акцент.
+`cs2_vac` (только для «Чаттера» и выше), `dota_fake_code`, `dota_not_found`, `dota_not_friends`.
+Время бана (`cs2b_30m` … `cs2b_7d`) стиля не имеет специально: восемь красных кнопок — это шум,
+а не акцент.
 
 Трекер: `tracker_add`, `tracker_list`, `tracker_notify`, `tracker_confirm`, `tracker_open_*`,
 `tracker_refresh_*`, `tracker_remove_*`.

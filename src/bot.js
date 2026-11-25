@@ -8,6 +8,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const config = require('./config');
 const tracker = require('./tracker');
+const access = require('./access');
 const captcha = require('./captcha');
 const ui = require('./ui');
 const BrowserPool = require('./browser-pool');
@@ -58,6 +59,54 @@ bot.use(async (ctx, next) => {
   }
 
   return showCaptcha(ctx);
+});
+
+// Второй вход: подписка. Пропускаем только то, что доступно без роли — само меню, экран профиля
+// и заглушку покупки; всё остальное упирается в всплывающее окно. Проверка стоит перед всеми
+// обработчиками, поэтому новый раздел нельзя случайно открыть, забыв про гейт.
+const NO_ACCESS_TEXT =
+  'Доступ закрыт: подписка не активна. Открой «👤 Профиль» — там статус и покупка.';
+const PUBLIC_CALLBACKS = new Set(['root_menu', 'access_profile', 'access_buy']);
+
+bot.use(async (ctx, next) => {
+  const userId = ctx.from?.id;
+  const data = String(ctx.callbackQuery?.data || '');
+
+  // Команды и обычный текст сюда не относятся: у них свои проверки внутри обработчиков.
+  if (!userId || !data) {
+    return next();
+  }
+
+  if (PUBLIC_CALLBACKS.has(data) || data.startsWith('captcha_')) {
+    return next();
+  }
+
+  const { role } = access.roleOf(userId);
+
+  if (data.startsWith('admin_') || data === 'access_admin') {
+    if (access.isAdmin(userId)) {
+      return next();
+    }
+
+    await ctx.answerCbQuery('Только для админа.', { show_alert: true }).catch(() => {});
+    return undefined;
+  }
+
+  if (data === 'cs2_vac') {
+    if (access.canRenderVAC(userId)) {
+      return next();
+    }
+
+    await ctx.answerCbQuery('VAC доступен на «Чаттере» и выше.', { show_alert: true }).catch(() => {});
+    return undefined;
+  }
+
+  if (access.level(role) < access.level(access.ROLE_WORKER)) {
+    await ctx.answerCbQuery(NO_ACCESS_TEXT, { show_alert: true }).catch(() => {});
+    return undefined;
+  }
+
+  return next();
 });
 
 const DEFAULT_SCREENSHOT_VIEWPORT = {
@@ -575,6 +624,12 @@ function formatHint(title, text) {
 // вызывающий экранирует их сам.
 function formatHintRaw(titleHtml, text) {
   return `<blockquote><b>${titleHtml}</b>\n${escapeHtml(text)}</blockquote>`;
+}
+
+// Блок с готовым HTML в теле: так на экранах доступа данные стоят в <b>/<code>. Динамика (ID, коды)
+// приходит уже экранированной вызывающим.
+function formatHintHtml(titleHtml, bodyHtml) {
+  return `<blockquote><b>${titleHtml}</b>\n${bodyHtml}</blockquote>`;
 }
 
 // Свои эмодзи у разделов — те же ID, что у кнопок в корне. В тексте они ставятся через <tg-emoji>,
@@ -2037,10 +2092,137 @@ function mainKeyboard() {
   return {
     inline_keyboard: [
       [b('🎭 Профиль', 'section_profile'), b('🎮 Коды', 'section_codes')],
-      [b('📡 Трекер', 'tracker_menu')]
+      [b('📡 Трекер', 'tracker_menu')],
+      // Длинная серая кнопка внизу: аккаунт, а не раздел с отрисовками.
+      [b('👤 Профиль', 'access_profile')]
     ]
   };
 }
+
+// ── Доступ: роли, подписка, админка ───────────────────────────────────────────────────────────────
+const ACCOUNT_LABEL = '👤 Профиль';
+
+// Время в МСК без Intl: у контейнера может не быть полного ICU, а формат нужен стабильный.
+function formatMoment(seconds) {
+  if (!seconds) {
+    return 'бессрочно';
+  }
+
+  const moment = new Date((Number(seconds) + 3 * 3600) * 1000);
+  const pad = (value) => String(value).padStart(2, '0');
+
+  return `${pad(moment.getUTCDate())}.${pad(moment.getUTCMonth() + 1)}.${moment.getUTCFullYear()} ` +
+    `${pad(moment.getUTCHours())}:${pad(moment.getUTCMinutes())} МСК`;
+}
+
+function accountText(userId) {
+  const info = access.roleOf(userId);
+  const lines = [`Роль: <b>${access.LABEL[info.role]}</b>`];
+
+  if (info.role !== access.ROLE_NONE) {
+    lines.push(`Подписка до: ${formatMoment(info.until)}`);
+  } else if (info.until && info.expired) {
+    lines.push(`Была роль ${access.LABEL[info.expired]}, истекла ${formatMoment(info.until)}`);
+  }
+
+  lines.push(`ID: <code>${escapeHtml(String(userId))}</code>`);
+
+  return lines.join('\n');
+}
+
+function accountKeyboard(userId) {
+  const rows = [];
+
+  if (access.roleOf(userId).role === access.ROLE_NONE) {
+    rows.push([b('💳 Купить подписку', 'access_buy')]);
+  }
+
+  if (access.isAdmin(userId)) {
+    rows.push([b('🛡 Админ-панель', 'access_admin')]);
+  }
+
+  rows.push(homeRow());
+
+  return { inline_keyboard: rows };
+}
+
+async function showAccount(ctx) {
+  await editMenu(ctx, formatHintHtml(ACCOUNT_LABEL, accountText(ctx.from.id)), accountKeyboard(ctx.from.id));
+}
+
+function roleChoiceKeyboard(prefix, back) {
+  return {
+    inline_keyboard: [
+      [b('🔧 Воркер', `${prefix}_${access.ROLE_WORKER}`)],
+      [b('💬 Чаттер', `${prefix}_${access.ROLE_CHATTER}`)],
+      [b('🛡 Админ', `${prefix}_${access.ROLE_ADMIN}`)],
+      [b('← Назад', back)]
+    ]
+  };
+}
+
+// Срок в callback: 7/30/90 дней, 0 — бессрочно.
+function termChoiceKeyboard(prefix, back) {
+  return {
+    inline_keyboard: [
+      [b('7 дней', `${prefix}_7`), b('30 дней', `${prefix}_30`)],
+      [b('90 дней', `${prefix}_90`), b('∞ Навсегда', `${prefix}_0`)],
+      [b('← Назад', back)]
+    ]
+  };
+}
+
+function adminKeyboard() {
+  return {
+    inline_keyboard: [
+      [b('🎟 Создать промокод', 'admin_promo_new')],
+      [b('👤 Выдать роль по ID', 'admin_grant')],
+      [b('🛡 Выдать админку', 'admin_grant_admin')],
+      [b('🗂 Промокоды', 'admin_promos')],
+      [b('← Назад', 'access_profile')]
+    ]
+  };
+}
+
+function promoListText() {
+  const promos = access.listPromos();
+
+  if (promos.length === 0) {
+    return 'Промокодов пока нет.';
+  }
+
+  return promos
+    .map((promo) => {
+      const term = promo.days ? `${promo.days} дн.` : 'бессрочно';
+      return `<code>${escapeHtml(promo.code)}</code> · ${access.LABEL[promo.role]} · ${term} · ` +
+        `${promo.uses}/${promo.maxUses}`;
+    })
+    .join('\n');
+}
+
+function promoListKeyboard() {
+  const rows = access.listPromos().map((promo) => [
+    b(`🗑 ${promo.code}`, `admin_promo_del_${promo.code}`)
+  ]);
+
+  rows.push([b('← Назад', 'admin_panel')]);
+
+  return { inline_keyboard: rows };
+}
+
+// Код без спецсимволов: его набирают руками в чате.
+function randomCode(role) {
+  const head = { worker: 'WORK', chatter: 'CHAT', admin: 'ADMIN' }[role] || 'PROMO';
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let tail = '';
+
+  for (let i = 0; i < 6; i += 1) {
+    tail += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+
+  return `${head}-${tail}`;
+}
+
 
 function profileKeyboard() {
   return {
@@ -2122,16 +2304,23 @@ function dotaKeyboard() {
   };
 }
 
-function cs2Keyboard() {
-  return {
-    inline_keyboard: [
-      [b('🎯 Fake Code', 'cs2_fake_code')],
-      [b('❓ Code Not Found', 'cs2_not_found')],
-      [b('⛔ Ban', 'cs2_ban')],
-      [b('← Назад', 'section_codes')],
-      homeRow()
-    ]
-  };
+// VAC — отдельная отрисовка: её видят только «Чаттер» и «Админ», поэтому клавиатура собирается
+// под пользователя, а не один раз на всех.
+function cs2Keyboard(userId) {
+  const rows = [
+    [b('🎯 Fake Code', 'cs2_fake_code')],
+    [b('❓ Code Not Found', 'cs2_not_found')],
+    [b('⛔ Ban', 'cs2_ban')]
+  ];
+
+  if (userId !== undefined && access.canRenderVAC(userId)) {
+    rows.push([b('🛡 VAC', 'cs2_vac')]);
+  }
+
+  rows.push([b('← Назад', 'section_codes')]);
+  rows.push(homeRow());
+
+  return { inline_keyboard: rows };
 }
 
 // Durations of the ban screen, in the order the operator sees them. The label is what gets painted
@@ -2854,7 +3043,8 @@ function startHealthServer() {
       },
       browser: browserPool.getStats(),
       tracker: tracker.status(),
-      captcha: captcha.stats()
+      captcha: captcha.stats(),
+      access: access.status()
     }));
   });
 
@@ -2869,12 +3059,63 @@ bot.start((ctx) => showTemplateMenu(ctx, { fresh: true, deleteCommand: true }));
 bot.command('menu', (ctx) => showTemplateMenu(ctx, { fresh: true, deleteCommand: true }));
 bot.command('tracker', (ctx) => {
   deleteIncomingMessage(ctx).catch(() => {});
+
+  if (!access.atLeast(ctx.from.id, access.ROLE_WORKER)) {
+    return ctx.reply(NO_ACCESS_TEXT).catch(() => {});
+  }
+
   return showTracker(ctx);
+});
+
+// Промокод: выдаёт роль на срок, прописанный в коде. Доступно всем — это вход, а не отрисовка.
+bot.command('promo', async (ctx) => {
+  await deleteIncomingMessage(ctx).catch(() => {});
+
+  const code = String(ctx.message?.text || '').split(/\s+/).slice(1).join(' ').trim();
+
+  if (!code) {
+    await editMenu(
+      ctx,
+      formatHintHtml(ACCOUNT_LABEL, 'Отправь так: <code>/promo КОД</code>'),
+      accountKeyboard(ctx.from.id)
+    );
+    return;
+  }
+
+  const result = await access.redeemPromo(ctx.from.id, code);
+
+  if (!result.ok) {
+    const reason = {
+      missing: 'Такого кода нет. Проверь написание.',
+      used_by_you: 'Ты уже активировал этот код.',
+      used_up: 'Код уже использован.'
+    }[result.reason] || 'Код не подошёл.';
+
+    await editMenu(ctx, formatHintRaw(ACCOUNT_LABEL, reason), accountKeyboard(ctx.from.id));
+    return;
+  }
+
+  const term = result.until ? formatMoment(result.until) : 'бессрочно';
+
+  await editMenu(
+    ctx,
+    formatHintHtml(
+      ACCOUNT_LABEL,
+      `Код <code>${escapeHtml(result.code)}</code> принят.\n` +
+        `Роль: <b>${access.LABEL[result.role]}</b>\nДо: ${term}`
+    ),
+    accountKeyboard(ctx.from.id)
+  );
 });
 
 // Пересланный премиум-эмодзи → его custom_emoji_id, чтобы заполнять data/ui.json без сторонних ботов.
 bot.command('emoji', async (ctx) => {
   await deleteIncomingMessage(ctx);
+
+  if (!access.isAdmin(ctx.from.id)) {
+    await ctx.reply('Только для админа.').catch(() => {});
+    return;
+  }
 
   const ids = (ctx.message?.entities || [])
     .filter((entity) => entity.type === 'custom_emoji')
@@ -2921,6 +3162,243 @@ bot.action('section_codes', async (ctx) => {
   await ctx.answerCbQuery();
   await showSection(ctx, CODES_LABEL, 'CS2 и D2.', codesKeyboard());
 });
+
+/* ---------- доступ: профиль, покупка, админка ---------- */
+
+const ADMIN_LABEL = '🛡 Админ-панель';
+
+bot.action('access_profile', async (ctx) => {
+  await ctx.answerCbQuery();
+  await showAccount(ctx);
+});
+
+// Заглушка: кнопка есть, платежей ещё нет — нажатие просто закрывает «часики».
+bot.action('access_buy', async (ctx) => {
+  await ctx.answerCbQuery();
+});
+
+bot.action('access_admin', async (ctx) => {
+  await ctx.answerCbQuery();
+  await editMenu(ctx, formatHintRaw(ADMIN_LABEL, 'Промокоды, роли, админка.'), adminKeyboard());
+});
+
+bot.action('admin_panel', async (ctx) => {
+  await ctx.answerCbQuery();
+  await editMenu(ctx, formatHintRaw(ADMIN_LABEL, 'Промокоды, роли, админка.'), adminKeyboard());
+});
+
+bot.action('admin_promo_new', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.admin = { role: null, days: null, targetId: null };
+  state.status = 'admin_promo_role';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHintRaw(ADMIN_LABEL, 'Какую роль выдаёт промокод?'),
+    roleChoiceKeyboard('admin_promo_role', 'admin_panel')
+  );
+});
+
+bot.action(/^admin_promo_role_(worker|chatter|admin)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.admin = { ...(state.admin || {}), role: ctx.match[1] };
+  state.status = 'admin_promo_days';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHintRaw(ADMIN_LABEL, `Роль: ${access.LABEL[ctx.match[1]]}.\nТеперь срок.`),
+    termChoiceKeyboard('admin_promo_days', 'admin_promo_new')
+  );
+});
+
+bot.action(/^admin_promo_days_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  const days = Number(ctx.match[1]);
+
+  state.admin = { ...(state.admin || {}), days: days || null };
+  state.status = 'access_waiting_promo_code';
+  userState.set(ctx.from.id, state);
+
+  const term = days ? `${days} дн.` : 'бессрочно';
+
+  await editMenu(
+    ctx,
+    formatHintRaw(
+      ADMIN_LABEL,
+      `Роль: ${access.LABEL[state.admin.role]}, срок: ${term}\n` +
+        `Отправь код (до ${access.CODE_MAX} символов) — или нажми «Случайный».`
+    ),
+    { inline_keyboard: [[b('🎲 Случайный код', 'admin_promo_random')], [b('✖️ Отмена', 'admin_panel')]] }
+  );
+});
+
+// Результат создания промокода: и для случайного, и для придуманного руками.
+async function finishPromo(ctx, code) {
+  const state = getUserState(ctx);
+  const admin = state.admin || {};
+  const result = await access.createPromo({
+    code,
+    role: admin.role,
+    days: admin.days,
+    createdBy: ctx.from.id
+  });
+
+  state.status = 'admin_promo_role';
+  state.admin = { role: null, days: null, targetId: null };
+  userState.set(ctx.from.id, state);
+
+  if (!result.ok) {
+    const reason = {
+      empty: 'Код пустой.',
+      too_long: `Код длиннее ${access.CODE_MAX} символов.`,
+      symbols: 'В коде только латиница, цифры и дефис.',
+      exists: 'Такой код уже есть.',
+      role: 'Роль не выбрана — начни заново.'
+    }[result.reason] || 'Не получилось создать код.';
+
+    await editMenu(ctx, formatHintRaw(ADMIN_LABEL, reason), adminKeyboard());
+    return;
+  }
+
+  const term = result.promo.days ? `${result.promo.days} дн.` : 'бессрочно';
+  const text =
+    `Код: <code>${escapeHtml(result.code)}</code>\n` +
+    `Роль: ${access.LABEL[result.promo.role]}, срок: ${term}\n` +
+    'Выдать: <code>/promo ' + escapeHtml(result.code) + '</code>';
+
+  await editMenu(ctx, formatHintHtml(ADMIN_LABEL, text), adminKeyboard());
+}
+
+bot.action('admin_promo_random', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  const admin = state.admin || {};
+
+  if (!admin.role) {
+    await editMenu(ctx, formatHintRaw(ADMIN_LABEL, 'Сначала выбери роль.'), adminKeyboard());
+    return;
+  }
+
+  await finishPromo(ctx, randomCode(admin.role));
+});
+
+bot.action('admin_promos', async (ctx) => {
+  await ctx.answerCbQuery();
+  await editMenu(ctx, formatHintHtml(ADMIN_LABEL, promoListText()), promoListKeyboard());
+});
+
+bot.action(/^admin_promo_del_([A-Z0-9-]{1,24})$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  await access.revokePromo(ctx.match[1]);
+  await editMenu(ctx, formatHintHtml(ADMIN_LABEL, promoListText()), promoListKeyboard());
+});
+
+bot.action('admin_grant', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.admin = { role: null, days: null, targetId: null };
+  state.status = 'access_waiting_grant_id';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHintRaw(ADMIN_LABEL, 'Отправь Telegram ID того, кому выдаём роль.'),
+    { inline_keyboard: [[b('✖️ Отмена', 'admin_panel')]] }
+  );
+});
+
+bot.action('admin_grant_admin', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  state.admin = { role: null, days: null, targetId: null };
+  state.status = 'access_waiting_admin_id';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHintRaw(ADMIN_LABEL, 'Админка бессрочная. Отправь Telegram ID.'),
+    { inline_keyboard: [[b('✖️ Отмена', 'admin_panel')]] }
+  );
+});
+
+bot.action(/^admin_grant_role_(worker|chatter|admin)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  const admin = state.admin || {};
+
+  if (!admin.targetId) {
+    await editMenu(ctx, formatHintRaw(ADMIN_LABEL, 'Сначала отправь Telegram ID.'), adminKeyboard());
+    return;
+  }
+
+  state.admin = { ...admin, role: ctx.match[1] };
+  state.status = 'admin_grant_days';
+  userState.set(ctx.from.id, state);
+
+  await editMenu(
+    ctx,
+    formatHintHtml(
+      ADMIN_LABEL,
+      `ID <code>${escapeHtml(admin.targetId)}</code> · ${access.LABEL[ctx.match[1]]}.\nТеперь срок.`
+    ),
+    termChoiceKeyboard('admin_grant_days', 'admin_grant')
+  );
+});
+
+bot.action(/^admin_grant_days_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const state = getUserState(ctx);
+  const admin = state.admin || {};
+  const days = Number(ctx.match[1]);
+
+  if (!admin.targetId || !admin.role) {
+    await editMenu(ctx, formatHintRaw(ADMIN_LABEL, 'Данных не хватает — начни заново.'), adminKeyboard());
+    return;
+  }
+
+  const entry = await access.setRole(admin.targetId, admin.role, days, ctx.from.id);
+
+  state.status = 'admin_panel';
+  state.admin = { role: null, days: null, targetId: null };
+  userState.set(ctx.from.id, state);
+
+  const term = entry.until ? formatMoment(entry.until) : 'бессрочно';
+
+  await editMenu(
+    ctx,
+    formatHintHtml(
+      ADMIN_LABEL,
+      `Готово.\nID <code>${escapeHtml(admin.targetId)}</code>\n` +
+        `Роль: ${access.LABEL[admin.role]}\nДо: ${term}`
+    ),
+    adminKeyboard()
+  );
+});
+
+// VAC — пока заглушка: шаблона ещё нет, но кнопка и проверка доступа уже на месте.
+bot.action('cs2_vac', async (ctx) => {
+  await ctx.answerCbQuery();
+  await editMenu(
+    ctx,
+    formatHintRaw(CODES_LABEL + ' · CS2 · VAC', 'Шаблон VAC ещё не залит на сервер.'),
+    { inline_keyboard: [[b('← Назад', 'cs2_menu')], homeRow()] }
+  );
+});
+
 
 // «Ещё раз» возвращает тот же экран в состояние «ждём ссылку», не заставляя идти по меню заново.
 bot.action('again', async (ctx) => {
@@ -3105,7 +3583,7 @@ bot.action('cs2_menu', async (ctx) => {
   state.cs2Profile = null;
   userState.set(ctx.from.id, state);
 
-  await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · CS2', 'Выбери экран.'), cs2Keyboard());
+  await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · CS2', 'Выбери экран.'), cs2Keyboard(ctx.from.id));
 });
 
 bot.action('cs2_fake_code', (ctx) => startCs2Flow(ctx, config.TEMPLATES.CS2_WRONG_CODE));
@@ -3587,11 +4065,59 @@ bot.on('text', async (ctx) => {
     return showTemplateMenu(ctx, { fresh: true });
   }
 
+  // ── админка: ответы на «отправь код / ID» ──
+  if (state.status === 'access_waiting_promo_code') {
+    await deleteIncomingMessage(ctx);
+    await finishPromo(ctx, url);
+    return;
+  }
+
+  if (state.status === 'access_waiting_grant_id' || state.status === 'access_waiting_admin_id') {
+    await deleteIncomingMessage(ctx);
+
+    const targetId = url.replace(/[^\d]/g, '');
+
+    if (!/^\d{4,20}$/.test(targetId)) {
+      await editMenu(
+        ctx,
+        formatHintRaw(ADMIN_LABEL, 'Это не Telegram ID. Отправь число.'),
+        { inline_keyboard: [[b('✖️ Отмена', 'admin_panel')]] }
+      );
+      return;
+    }
+
+    if (state.status === 'access_waiting_admin_id') {
+      await access.setRole(targetId, access.ROLE_ADMIN, null, ctx.from.id);
+
+      state.status = 'admin_panel';
+      state.admin = { role: null, days: null, targetId: null };
+      userState.set(ctx.from.id, state);
+
+      await editMenu(
+        ctx,
+        formatHintHtml(ADMIN_LABEL, `Админка выдана.\nID <code>${escapeHtml(targetId)}</code>, бессрочно.`),
+        adminKeyboard()
+      );
+      return;
+    }
+
+    state.admin = { ...(state.admin || {}), targetId };
+    state.status = 'admin_grant_role';
+    userState.set(ctx.from.id, state);
+
+    await editMenu(
+      ctx,
+      formatHintHtml(ADMIN_LABEL, `ID <code>${escapeHtml(targetId)}</code>.\nКакую роль выдаём?`),
+      roleChoiceKeyboard('admin_grant_role', 'admin_panel')
+    );
+    return;
+  }
+
   if (state.status === 'waiting_cs2_link') {
     if (!isCs2Template(state.template)) {
       state.status = 'choosing_cs2_template';
       userState.set(ctx.from.id, state);
-      await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · CS2', 'Выбери экран.'), cs2Keyboard());
+      await editMenu(ctx, formatHintRaw(CODES_LABEL + ' · CS2', 'Выбери экран.'), cs2Keyboard(ctx.from.id));
       return;
     }
 
@@ -4455,6 +4981,7 @@ async function shutdown(signal) {
 async function main() {
   await browserPool.init();
   await tracker.load();
+  await access.load();
 
   // The poller is started before the Telegram launch on purpose: launch() resolves when long polling is
   // up, and a slow or retrying launch must not hold the tracker back.
@@ -4468,6 +4995,7 @@ async function main() {
     { command: 'start', description: 'Открыть меню' },
     { command: 'menu', description: 'Вернуться в меню' },
     { command: 'tracker', description: 'Трекер профилей' },
+    { command: 'promo', description: 'Активировать промокод' },
     { command: 'emoji', description: 'ID пересланного премиум-эмодзи' }
   ]).catch(error => {
     console.warn('Failed to set bot commands:', error.description || error.message);

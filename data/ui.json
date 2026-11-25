@@ -8,6 +8,17 @@
     "root_menu": { "icon": "5769662403188892779", "style": "" },
     "again": { "icon": "5769204478070759696", "style": "primary" },
 
+    "access_profile": { "icon": "", "style": "" },
+    "access_buy": { "icon": "", "style": "success" },
+    "access_admin": { "icon": "", "style": "" },
+    "admin_panel": { "icon": "", "style": "" },
+    "admin_promo_new": { "icon": "", "style": "primary" },
+    "admin_promo_random": { "icon": "", "style": "" },
+    "admin_promos": { "icon": "", "style": "" },
+    "admin_promo_del_*": { "icon": "", "style": "danger" },
+    "admin_grant": { "icon": "", "style": "" },
+    "admin_grant_admin": { "icon": "", "style": "danger" },
+
     "template_friend": { "icon": "5769615089829160389", "style": "primary" },
     "qr_friend": { "icon": "5769163860565041689", "style": "primary" },
     "template_steam_notice": { "icon": "5769318599646781593", "style": "primary" },
@@ -26,6 +37,7 @@
 
     "cs2_menu": { "icon": "5769416039569826039", "style": "primary" },
     "dota_menu": { "icon": "5769626939643929173", "style": "primary" },
+    "cs2_vac": { "icon": "", "style": "" },
     "cs2_fake_code": { "icon": "5769364285213909331", "style": "" },
     "cs2_not_found": { "icon": "5767296748087157309", "style": "" },
     "cs2_ban": { "icon": "5769362077600719279", "style": "danger" },
