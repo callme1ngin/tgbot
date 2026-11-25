@@ -646,7 +646,9 @@ function sectionLabel(name, glyph, title) {
 }
 
 const MENU_LABEL = sectionLabel('menu', '🏠', 'Меню');
-const PROFILE_LABEL = sectionLabel('profile', '🎭', 'Профиль');
+// Раздел в меню называется «Отрисовки», а экран внутри — «Steam»: там всё, что отрисовывается по
+// Steam-профилям, CS2 и D2 живут в «Кодах».
+const STEAM_SECTION_LABEL = sectionLabel('profile', '🎭', 'Steam');
 const CODES_LABEL = sectionLabel('codes', '🎮', 'Коды');
 const TRACKER_LABEL = sectionLabel('tracker', '📡', 'Трекер');
 
@@ -2091,7 +2093,7 @@ const homeRow = () => [b('🏠 Меню', 'root_menu')];
 function mainKeyboard() {
   return {
     inline_keyboard: [
-      [b('🎭 Профиль', 'section_profile'), b('🎮 Коды', 'section_codes')],
+      [b('🎭 Отрисовки', 'section_profile'), b('🎮 Коды', 'section_codes')],
       [b('📡 Трекер', 'tracker_menu')],
       // Длинная серая кнопка внизу: аккаунт, а не раздел с отрисовками.
       [b('👤 Профиль', 'access_profile')]
@@ -3155,7 +3157,7 @@ async function showSection(ctx, titleHtml, text, keyboard) {
 
 bot.action('section_profile', async (ctx) => {
   await ctx.answerCbQuery();
-  await showSection(ctx, PROFILE_LABEL, 'Что собрать?', profileKeyboard());
+  await showSection(ctx, STEAM_SECTION_LABEL, 'Что собрать?', profileKeyboard());
 });
 
 bot.action('section_codes', async (ctx) => {
